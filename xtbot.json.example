@@ -1,0 +1,31 @@
+{
+  "adminOpenIds": [],
+  "bots": [
+    {
+      "id": "bot-001",
+      "name": "My Claude Bot",
+      "channel": "feishu",
+      "feishuAppId": "cli_xxxxxxxxx",
+      "feishuAppSecret": "xxxxxxxxxxxxxxxxxx",
+      "projects": [
+        {
+          "id": "proj-001",
+          "name": "H5商城",
+          "path": "/path/to/h5-mall",
+          "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash"],
+          "maxTurns": 100,
+          "maxBudgetUsd": 1.5
+        },
+        {
+          "id": "proj-002",
+          "name": "后台API",
+          "path": "/path/to/backend-api",
+          "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash"],
+          "maxTurns": 100,
+          "maxBudgetUsd": 1.5
+        }
+      ],
+      "currentProjectId": "proj-001"
+    }
+  ]
+}
