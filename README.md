@@ -1,79 +1,130 @@
 # XT Claude Code with Feishu
 
-A bridge service connecting Feishu Bot to Claude Code CLI, enabling seamless interaction with Claude Code through Feishu messaging platform.
+桥接服务，将飞书机器人连接到 Claude Code CLI，支持多项目切换和用户级会话隔离。
 
-## Features
+## 功能特性
 
-- Bidirectional communication between Feishu Bot and Claude Code CLI
-- Real-time message handling and response streaming
-- File watching and automatic synchronization
-- Secure authentication and session management
-- Structured logging with Pino
+- 多机器人支持，每个机器人可配置多个项目
+- 用户级会话隔离，每个用户独立选择项目
+- 通过 `/switch <项目名> [--clear]` 切换项目
+- 文件变更自动检测并发送
+- 可扩展的 Channel 架构（当前支持飞书）
 
-## Prerequisites
+## 技术栈
 
-- Node.js 18 or higher
-- npm or yarn
-- Feishu App credentials (App ID and App Secret)
-- Claude API key
+- TypeScript + Node.js 18+
+- @anthropic-ai/claude-agent-sdk
+- @larksuiteoapi/node-sdk
+- pino（日志）
+- chokidar（文件监听）
 
-## Installation
+## 快速开始
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd XTClaudeFeiShu
-```
+### 1. 安装依赖
 
-2. Install dependencies:
 ```bash
 npm install
 ```
 
-3. Configure environment variables:
+### 2. 配置
+
+复制示例配置文件：
+
 ```bash
-cp .env.example .env
+cp xtbot.json.example xtbot.json
 ```
 
-Edit `.env` and fill in your credentials:
-- `CLAUDE_API_KEY`: Your Claude API key
-- `FEISHU_APP_ID`: Your Feishu App ID
-- `FEISHU_APP_SECRET`: Your Feishu App Secret
-- `PORT`: Server port (default: 3000)
-- `LOG_LEVEL`: Logging level (default: info)
+编辑 `xtbot.json`，填入你的飞书机器人信息和项目路径：
 
-## Development
+```json
+{
+  "adminOpenIds": ["ou_xxx", "ou_yyy"],
+  "bots": [
+    {
+      "id": "bot-001",
+      "name": "开发机器人",
+      "channel": "feishu",
+      "feishuAppId": "cli_xxxxxxxxx",
+      "feishuAppSecret": "xxxxxxxxxxxxxxxxxx",
+      "projects": [
+        {
+          "id": "proj-001",
+          "name": "H5商城",
+          "path": "/path/to/your/project",
+          "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash"]
+        }
+      ],
+      "currentProjectId": "proj-001"
+    }
+  ]
+}
+```
 
-Start the development server with hot reload:
+### 3. 运行
+
+开发模式（热重载）：
+
 ```bash
 npm run dev
 ```
 
-## Build
+生产模式：
 
-Build the TypeScript code:
 ```bash
 npm run build
-```
-
-## Production
-
-Start the production server:
-```bash
 npm start
 ```
 
-## Project Structure
+## 命令
+
+- `/switch <项目名> [--clear]` - 切换项目
+- `/reset` - 重置当前会话
+- `/stop` - 停止当前任务
+- `/help` - 显示帮助
+
+## 配置说明
+
+### xtbot.json
+
+| 字段 | 说明 |
+|------|------|
+| `adminOpenIds` | 管理员 OpenID 列表 |
+| `bots` | 机器人配置数组 |
+| `bots[].id` | 机器人唯一标识 |
+| `bots[].name` | 机器人名称 |
+| `bots[].channel` | 渠道类型（当前仅支持 "feishu"） |
+| `bots[].feishuAppId` | 飞书 App ID |
+| `bots[].feishuAppSecret` | 飞书 App Secret |
+| `bots[].projects` | 项目配置数组 |
+| `bots[].projects[].id` | 项目唯一标识 |
+| `bots[].projects[].name` | 项目名称 |
+| `bots[].projects[].path` | 项目路径 |
+| `bots[].projects[].allowedTools` | 允许的工具列表 |
+| `bots[].currentProjectId` | 默认项目 ID |
+
+### .env
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `LOG_LEVEL` | 日志级别 | `info` |
+
+## 架构
 
 ```
-.
-├── src/              # Source code
-│   ├── index.ts      # Entry point
-├── dist/            # Compiled JavaScript
-├── .env.example     # Environment variables template
-├── package.json     # Project configuration
-├── tsconfig.json    # TypeScript configuration
-└── README.md        # This file
+src/
+├── channel/              # Channel 抽象层
+│   ├── IChannel.interface.ts
+│   └── feishu/           # 飞书实现
+├── bridge/               # 核心业务逻辑
+│   ├── MessageBridge.ts
+│   ├── SessionManager.ts
+│   ├── CommandHandler.ts
+│   └── FileWatcher.ts
+├── claude/               # Claude 集成
+│   └── ClaudeExecutor.ts
+├── types/                # 类型定义
+├── utils/                # 工具函数
+└── index.ts              # 入口文件
 ```
 
 ## License
