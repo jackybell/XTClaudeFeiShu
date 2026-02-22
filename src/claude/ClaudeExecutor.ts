@@ -39,7 +39,8 @@ export class ClaudeExecutor {
           cwd: options.workingDirectory,
           allowedTools: options.allowedTools,
           maxTurns: options.maxTurns || 100,
-          maxBudgetUsd: options.maxBudgetUsd || 1.5
+          maxBudgetUsd: options.maxBudgetUsd || 1.5,
+          includePartialMessages: true
         }
       })
 
@@ -80,6 +81,13 @@ export class ClaudeExecutor {
             }
           }
         } else if (message.type === 'result') {
+          if (message.result_type === 'error_during_execution') {
+            throw new Error(`Execution error: ${message.error || 'Unknown error'}`)
+          } else if (message.result_type === 'error_max_turns') {
+            throw new Error(`Max turns (${message.max_turns}) exceeded`)
+          } else if (message.result_type === 'error_max_budget_usd') {
+            throw new Error(`Max budget ($${message.max_budget_usd}) exceeded`)
+          }
           onChunk({ type: 'end', sessionId: message.session_id })
         }
       }
