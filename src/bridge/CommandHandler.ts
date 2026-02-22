@@ -28,7 +28,7 @@ export class CommandHandler {
       args.splice(clearIndex, 1)
     }
 
-    const validCommands = ['switch', 'reset', 'stop', 'help']
+    const validCommands = ['switch', 'reset', 'stop', 'help', 'skills']
     if (!validCommands.includes(command)) {
       return null
     }
@@ -56,6 +56,9 @@ export class CommandHandler {
         break
       case 'help':
         await this.handleHelp(message)
+        break
+      case 'skills':
+        await this.handleSkills(message)
         break
     }
 
@@ -117,7 +120,47 @@ export class CommandHandler {
       type: 'text',
       content: {
         title: 'Available Commands',
-        content: `**/switch <project> [--clear]** - Switch project\n**/reset** - Reset current session\n**/stop** - Stop current task\n**/help** - Show this help\n\nAvailable projects:\n${projects}`
+        content: `**/switch <project> [--clear]** - Switch project\n**/reset** - Reset current session\n**/stop** - Stop current task\n**/skills** - List available skills\n**/help** - Show this help\n\nAvailable projects:\n${projects}`
+      }
+    })
+  }
+
+  private async handleSkills(message: Message): Promise<void> {
+    const projectId = sessionManager.getUserProject(
+      this.bot.id,
+      message.userId,
+      this.bot.currentProjectId
+    )
+    const project = this.bot.projects.find(p => p.id === projectId)
+
+    if (!project) {
+      await this.channelSendText(message.chatId, 'Project not found.')
+      return
+    }
+
+    if (!project.enableSkills) {
+      await this.channelSendCard(message.chatId, {
+        type: 'text',
+        content: {
+          title: 'Skills Not Enabled',
+          content: `Skills are not enabled for project **${project.name}**.\n\nTo enable skills, set \`enableSkills: true\` in the project configuration.`
+        }
+      })
+      return
+    }
+
+    const skillInfo = [
+      `**Project:** ${project.name}`,
+      `**Skills Enabled:** ${project.enableSkills ? 'Yes' : 'No'}`,
+      `**Setting Sources:** ${project.settingSources?.join(', ') || 'Not configured'}`,
+      `**Plugins:** ${project.plugins?.length || 0} configured`
+    ].join('\n')
+
+    await this.channelSendCard(message.chatId, {
+      type: 'text',
+      content: {
+        title: 'Skills Configuration',
+        content: skillInfo
       }
     })
   }

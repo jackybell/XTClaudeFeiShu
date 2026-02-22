@@ -29,6 +29,9 @@ export interface Project {
   allowedTools: string[]
   maxTurns?: number
   maxBudgetUsd?: number
+  enableSkills?: boolean
+  settingSources?: ('project' | 'local' | 'user')[]
+  plugins?: Array<{ type: 'local'; path: string }>
 }
 
 export interface Bot {
@@ -64,7 +67,7 @@ export interface Session {
 
 // Command types
 export interface Command {
-  type: 'switch' | 'reset' | 'stop' | 'help'
+  type: 'switch' | 'reset' | 'stop' | 'help' | 'skills'
   args: string[]
   options: {
     clear?: boolean

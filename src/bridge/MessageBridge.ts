@@ -94,10 +94,19 @@ export class MessageBridge {
           workingDirectory: project.path,
           allowedTools: project.allowedTools,
           maxTurns: project.maxTurns,
-          maxBudgetUsd: project.maxBudgetUsd
+          maxBudgetUsd: project.maxBudgetUsd,
+          enableSkills: project.enableSkills ?? false,
+          settingSources: project.settingSources,
+          plugins: project.plugins,
+          onSkillDiscovered: (skills) => {
+            logger.info({ msg: 'Skills discovered for project', project: project.name, skills })
+          }
         },
         async (chunk) => {
-          if (chunk.type === 'content') {
+          if (chunk.type === 'system') {
+            // Skills discovered during execution
+            logger.info({ msg: 'System message: skills available', skills: chunk.skills })
+          } else if (chunk.type === 'content') {
             responseText += chunk.content || ''
             await this.updateCard(message.chatId, project, responseText)
           } else if (chunk.type === 'tool_use') {
