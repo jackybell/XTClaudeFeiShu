@@ -52,7 +52,7 @@ export function buildCard(config: CardConfig): any {
       tag: 'div',
       text: {
         tag: 'lark_md',
-        content: '**Tool Calls:**\n' + config.toolCalls.map(t =>
+        content: '**工具调用:**\n' + config.toolCalls.map(t =>
           `- \`${t.name}\` ${t.status}`
         ).join('\n')
       }
@@ -68,7 +68,7 @@ export function buildCard(config: CardConfig): any {
       tag: 'div',
       text: {
         tag: 'lark_md',
-        content: '**Output Files:**\n' + config.outputFiles.map(f =>
+        content: '**输出文件:**\n' + config.outputFiles.map(f =>
           `- ${f.name} (${formatSize(f.size)})`
         ).join('\n')
       }
@@ -82,10 +82,10 @@ export function buildCard(config: CardConfig): any {
     })
     const stats = []
     if (config.cost !== undefined) {
-      stats.push(`Cost: $${config.cost.toFixed(4)}`)
+      stats.push(`费用: $${config.cost.toFixed(4)}`)
     }
     if (config.duration !== undefined) {
-      stats.push(`Duration: ${formatDuration(config.duration)}`)
+      stats.push(`耗时: ${formatDuration(config.duration)}`)
     }
     card.elements.push({
       tag: 'div',

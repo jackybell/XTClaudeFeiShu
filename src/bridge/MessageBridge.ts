@@ -74,8 +74,8 @@ export class MessageBridge {
         type: 'status' as const,
         content: {
           status: 'thinking' as const,
-          title: 'Claude is thinking...',
-          content: `Project: **${project.name}**\n\n${message.text}`
+          title: '玄瞳开发助手正在思考...',
+          content: `项目: **${project.name}**\n\n${message.text}`
         }
       }
       await this.channel.sendCard(message.chatId, thinkingCard)
@@ -94,10 +94,19 @@ export class MessageBridge {
           workingDirectory: project.path,
           allowedTools: project.allowedTools,
           maxTurns: project.maxTurns,
-          maxBudgetUsd: project.maxBudgetUsd
+          maxBudgetUsd: project.maxBudgetUsd,
+          enableSkills: project.enableSkills ?? false,
+          settingSources: project.settingSources,
+          plugins: project.plugins,
+          onSkillDiscovered: (skills) => {
+            logger.info({ msg: 'Skills discovered for project', project: project.name, skills })
+          }
         },
         async (chunk) => {
-          if (chunk.type === 'content') {
+          if (chunk.type === 'system') {
+            // Skills discovered during execution
+            logger.info({ msg: 'System message: skills available', skills: chunk.skills })
+          } else if (chunk.type === 'content') {
             responseText += chunk.content || ''
             await this.updateCard(message.chatId, project, responseText)
           } else if (chunk.type === 'tool_use') {
@@ -125,8 +134,8 @@ export class MessageBridge {
         type: 'result',
         content: {
           status: 'success',
-          title: 'Task completed',
-          content: responseText || 'Done',
+          title: '任务完成',
+          content: responseText || '完成',
           toolCalls: this.toolCalls,
           outputFiles: this.outputFiles,
           duration
@@ -139,7 +148,7 @@ export class MessageBridge {
         type: 'error',
         content: {
           status: 'error',
-          title: 'Error',
+          title: '错误',
           content: (error as Error).message
         }
       })
@@ -157,8 +166,8 @@ export class MessageBridge {
       type: 'status' as const,
       content: {
         status: 'running',
-        title: 'Running...',
-        content: `Project: **${project.name}**\n\n${responseText || 'Working...'}`,
+        title: '执行中...',
+        content: `项目: **${project.name}**\n\n${responseText || '工作中...'}`,
         toolCalls: this.toolCalls,
         duration
       }

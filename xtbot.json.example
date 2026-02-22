@@ -14,7 +14,10 @@
           "path": "/path/to/h5-mall",
           "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash"],
           "maxTurns": 100,
-          "maxBudgetUsd": 1.5
+          "maxBudgetUsd": 1.5,
+          "enableSkills": true,
+          "settingSources": ["project", "local"],
+          "plugins": []
         },
         {
           "id": "proj-002",
@@ -22,7 +25,8 @@
           "path": "/path/to/backend-api",
           "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash"],
           "maxTurns": 100,
-          "maxBudgetUsd": 1.5
+          "maxBudgetUsd": 1.5,
+          "enableSkills": false
         }
       ],
       "currentProjectId": "proj-001"

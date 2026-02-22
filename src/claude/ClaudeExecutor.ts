@@ -10,14 +10,19 @@ export interface ClaudeOptions {
   allowedTools: string[]
   maxTurns?: number
   maxBudgetUsd?: number
+  enableSkills?: boolean
+  settingSources?: ('project' | 'local' | 'user')[]
+  plugins?: Array<{ type: 'local'; path: string }>
+  onSkillDiscovered?: (skills: string[]) => void
 }
 
 export interface StreamChunk {
-  type: 'content' | 'tool_use' | 'tool_result' | 'end'
+  type: 'content' | 'tool_use' | 'tool_result' | 'end' | 'system'
   content?: string
   toolName?: string
   toolInput?: string
   sessionId?: string
+  skills?: string[]
 }
 
 export class ClaudeExecutor {
@@ -29,25 +34,51 @@ export class ClaudeExecutor {
     this.runningTasks.set(taskId, abortController)
 
     try {
+      const queryOptions: Record<string, unknown> = {
+        abortController,
+        sessionId: options.sessionId,
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+        cwd: options.workingDirectory,
+        allowedTools: options.allowedTools,
+        maxTurns: options.maxTurns || 100,
+        maxBudgetUsd: options.maxBudgetUsd || 1.5,
+        includePartialMessages: true
+      }
+
+      // Enable skills support if requested
+      if (options.enableSkills) {
+        queryOptions.settingSources = options.settingSources || ['project', 'local']
+        queryOptions.plugins = options.plugins || []
+        logger.info({
+          msg: 'Skills enabled',
+          settingSources: queryOptions.settingSources,
+          plugins: queryOptions.plugins
+        })
+      }
+
       const queryIterator = query({
         prompt: options.query,
-        options: {
-          abortController,
-          sessionId: options.sessionId,
-          permissionMode: 'bypassPermissions',
-          allowDangerouslySkipPermissions: true,
-          cwd: options.workingDirectory,
-          allowedTools: options.allowedTools,
-          maxTurns: options.maxTurns || 100,
-          maxBudgetUsd: options.maxBudgetUsd || 1.5,
-          includePartialMessages: true
-        }
+        options: queryOptions
       })
 
       for await (const message of queryIterator) {
         if (abortController.signal.aborted) break
 
-        if (message.type === 'stream_event') {
+        // Handle system messages (for skill discovery)
+        if (message.type === 'system') {
+          const systemMsg = message as { subtype?: string; skills?: string[]; slash_commands?: string[] }
+          if (systemMsg.subtype === 'init' || systemMsg.subtype === 'config_change') {
+            const skills = systemMsg.skills || systemMsg.slash_commands || []
+            if (skills.length > 0) {
+              logger.info({ msg: 'Skills discovered', skills })
+              onChunk({ type: 'system', skills })
+              if (options.onSkillDiscovered) {
+                options.onSkillDiscovered(skills)
+              }
+            }
+          }
+        } else if (message.type === 'stream_event') {
           const partialMsg = message as SDKPartialAssistantMessage
           if (partialMsg.event.type === 'content_block_delta') {
             const delta = partialMsg.event.delta
