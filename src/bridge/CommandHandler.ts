@@ -87,8 +87,8 @@ export class CommandHandler {
       await this.channelSendCard(message.chatId, {
         type: 'text',
         content: {
-          title: 'Available Projects',
-          content: `Current: **${this.getCurrentProjectName()}**\n\nAvailable projects:\n${projects}\n\nUsage: \`/switch <project-name> [--clear]\``
+          title: '可用项目',
+          content: `当前: **${this.getCurrentProjectName()}**\n\n可用项目:\n${projects}\n\n用法: \`/switch <项目名> [--clear]\``
         }
       })
       return
@@ -97,7 +97,7 @@ export class CommandHandler {
     const project = this.bot.projects.find(p => p.name === projectName || p.id === projectName)
 
     if (!project) {
-      await this.channelSendText(message.chatId, `Project "${projectName}" not found. Use /help to see available projects.`)
+      await this.channelSendText(message.chatId, `未找到项目 "${projectName}"。使用 /help 查看可用项目。`)
       return
     }
 
@@ -112,20 +112,20 @@ export class CommandHandler {
     await this.channelSendCard(message.chatId, {
       type: 'text',
       content: {
-        title: 'Project Switched',
-        content: `Switched to **${project.name}**\nPath: \`${project.path}\`\n\n${command.options.clear ? 'Previous session cleared.' : 'Previous session preserved.'}`
+        title: '项目已切换',
+        content: `已切换到 **${project.name}**\n路径: \`${project.path}\`\n\n${command.options.clear ? '已清除之前的会话。' : '保留了之前的会话。'}`
       }
     })
   }
 
   private async handleReset(message: Message): Promise<void> {
     sessionManager.deleteSession(this.bot.id, message.userId)
-    await this.channelSendText(message.chatId, 'Session reset. Next message will start a fresh conversation.')
+    await this.channelSendText(message.chatId, '会话已重置。下一条消息将开始新的对话。')
   }
 
   private async handleStop(message: Message): Promise<void> {
     // TODO: Implement stopping running tasks
-    await this.channelSendText(message.chatId, 'Stop functionality coming soon.')
+    await this.channelSendText(message.chatId, '停止功能即将推出。')
   }
 
   private async handleHelp(message: Message): Promise<void> {
@@ -133,8 +133,8 @@ export class CommandHandler {
     await this.channelSendCard(message.chatId, {
       type: 'text',
       content: {
-        title: 'Available Commands',
-        content: `**/switch <project> [--clear]** - Switch project\n**/reset** - Reset current session\n**/stop** - Stop current task\n**/skills** - List available skills\n**/projects [list|add|remove]** - Manage projects\n**/help** - Show this help\n\nAvailable projects:\n${projects}`
+        title: '可用命令',
+        content: `**/switch <项目> [--clear]** - 切换项目\n**/reset** - 重置当前会话\n**/stop** - 停止当前任务\n**/skills** - 查看可用技能\n**/projects [list|add|remove]** - 管理项目\n**/help** - 显示此帮助\n\n可用项目:\n${projects}`
       }
     })
   }
@@ -148,7 +148,7 @@ export class CommandHandler {
     const project = this.bot.projects.find(p => p.id === projectId)
 
     if (!project) {
-      await this.channelSendText(message.chatId, 'Project not found.')
+      await this.channelSendText(message.chatId, '未找到项目。')
       return
     }
 
@@ -156,24 +156,24 @@ export class CommandHandler {
       await this.channelSendCard(message.chatId, {
         type: 'text',
         content: {
-          title: 'Skills Not Enabled',
-          content: `Skills are not enabled for project **${project.name}**.\n\nTo enable skills, set \`enableSkills: true\` in the project configuration.`
+          title: '未启用技能',
+          content: `项目 **${project.name}** 未启用技能。\n\n要启用技能，请在项目配置中设置 \`enableSkills: true\`。`
         }
       })
       return
     }
 
     const skillInfo = [
-      `**Project:** ${project.name}`,
-      `**Skills Enabled:** ${project.enableSkills ? 'Yes' : 'No'}`,
-      `**Setting Sources:** ${project.settingSources?.join(', ') || 'Not configured'}`,
-      `**Plugins:** ${project.plugins?.length || 0} configured`
+      `**项目:** ${project.name}`,
+      `**技能已启用:** ${project.enableSkills ? '是' : '否'}`,
+      `**设置来源:** ${project.settingSources?.join(', ') || '未配置'}`,
+      `**插件:** ${project.plugins?.length || 0} 个`
     ].join('\n')
 
     await this.channelSendCard(message.chatId, {
       type: 'text',
       content: {
-        title: 'Skills Configuration',
+        title: '技能配置',
         content: skillInfo
       }
     })
@@ -186,8 +186,8 @@ export class CommandHandler {
       await this.channelSendCard(message.chatId, {
         type: 'text',
         content: {
-          title: 'Projects Commands',
-          content: `**/projects list** - List all projects\n**/projects add <id> <name> <path>** - Add a new project (admin only)\n**/projects remove <id>** - Remove a project (admin only)\n\nUsage:\n\`/projects add proj-003 "My Project" /path/to/project\``
+          title: '项目管理命令',
+          content: `**/projects list** - 列出所有项目\n**/projects add <id> <name> <path>** - 添加新项目（仅管理员）\n**/projects remove <id>** - 删除项目（仅管理员）\n\n用法:\n\`/projects add proj-003 "我的项目" /path/to/project\``
         }
       })
       return
@@ -212,17 +212,17 @@ export class CommandHandler {
       const skillsStatus = p.enableSkills ? '✓' : '✗'
       return [
         `${isCurrent ? '→' : ' '} **${p.name}** (\`${p.id}\`)`,
-        `   Path: \`${p.path}\``,
-        `   Skills: ${skillsStatus}`,
-        `   Tools: ${p.allowedTools.length} allowed`
+        `   路径: \`${p.path}\``,
+        `   技能: ${skillsStatus}`,
+        `   工具: ${p.allowedTools.length} 个可用`
       ].join('\n')
     }).join('\n\n')
 
     await this.channelSendCard(message.chatId, {
       type: 'text',
       content: {
-        title: `Projects (${this.bot.projects.length})`,
-        content: projectsList || 'No projects configured.'
+        title: `项目列表 (${this.bot.projects.length})`,
+        content: projectsList || '未配置项目。'
       }
     })
   }
@@ -230,7 +230,7 @@ export class CommandHandler {
   private async handleProjectsAdd(message: Message, command: Command): Promise<void> {
     // Check admin permission
     if (!configManager.isAdmin(message.userId)) {
-      await this.channelSendText(message.chatId, '⚠️ Only administrators can add projects.')
+      await this.channelSendText(message.chatId, '⚠️ 只有管理员可以添加项目。')
       return
     }
 
@@ -239,8 +239,8 @@ export class CommandHandler {
       await this.channelSendCard(message.chatId, {
         type: 'text',
         content: {
-          title: 'Usage',
-          content: `**/projects add <id> <name> <path>**\n\nExample:\n\`/projects add proj-003 "My Project" /home/user/project\`\n\nNote: Path must be an absolute path.`
+          title: '用法',
+          content: `**/projects add <id> <name> <path>**\n\n示例:\n\`/projects add proj-003 "我的项目" /home/user/project\`\n\n注意: 路径必须是绝对路径。`
         }
       })
       return
@@ -252,7 +252,7 @@ export class CommandHandler {
 
     // Check if project already exists
     if (this.bot.projects.find(p => p.id === projectId)) {
-      await this.channelSendText(message.chatId, `⚠️ Project with id "${projectId}" already exists.`)
+      await this.channelSendText(message.chatId, `⚠️ 项目 id "${projectId}" 已存在。`)
       return
     }
 
@@ -260,7 +260,7 @@ export class CommandHandler {
     try {
       await fs.access(projectPath)
     } catch {
-      await this.channelSendText(message.chatId, `⚠️ Path does not exist or is not accessible: ${projectPath}`)
+      await this.channelSendText(message.chatId, `⚠️ 路径不存在或无法访问: ${projectPath}`)
       return
     }
 
@@ -282,20 +282,20 @@ export class CommandHandler {
       await this.channelSendCard(message.chatId, {
         type: 'text',
         content: {
-          title: '✓ Project Added',
-          content: `Successfully added project:\n\n**${newProject.name}** (\`${newProject.id}\`)\nPath: \`${newProject.path}\`\n\nYou can now switch to it with:\n\`/switch ${newProject.name}\``
+          title: '✓ 项目已添加',
+          content: `成功添加项目:\n\n**${newProject.name}** (\`${newProject.id}\`)\n路径: \`${newProject.path}\`\n\n现在可以使用以下命令切换:\n\`/switch ${newProject.name}\``
         }
       })
     } catch (error) {
       logger.error({ msg: 'Failed to add project', error })
-      await this.channelSendText(message.chatId, `⚠️ Failed to add project: ${(error as Error).message}`)
+      await this.channelSendText(message.chatId, `⚠️ 添加项目失败: ${(error as Error).message}`)
     }
   }
 
   private async handleProjectsRemove(message: Message, command: Command): Promise<void> {
     // Check admin permission
     if (!configManager.isAdmin(message.userId)) {
-      await this.channelSendText(message.chatId, '⚠️ Only administrators can remove projects.')
+      await this.channelSendText(message.chatId, '⚠️ 只有管理员可以删除项目。')
       return
     }
 
@@ -304,8 +304,8 @@ export class CommandHandler {
       await this.channelSendCard(message.chatId, {
         type: 'text',
         content: {
-          title: 'Usage',
-          content: `**/projects remove <project-id>**\n\nExample:\n\`/projects remove proj-003\`\n\nNote: Use the project ID, not the name.`
+          title: '用法',
+          content: `**/projects remove <project-id>**\n\n示例:\n\`/projects remove proj-003\`\n\n注意: 使用项目 ID，而不是名称。`
         }
       })
       return
@@ -315,7 +315,7 @@ export class CommandHandler {
     const project = this.bot.projects.find(p => p.id === projectId)
 
     if (!project) {
-      await this.channelSendText(message.chatId, `⚠️ Project with id "${projectId}" not found.`)
+      await this.channelSendText(message.chatId, `⚠️ 未找到项目 id "${projectId}"。`)
       return
     }
 
@@ -330,18 +330,18 @@ export class CommandHandler {
       await this.channelSendCard(message.chatId, {
         type: 'text',
         content: {
-          title: '✓ Project Removed',
-          content: `Successfully removed project:\n\n**${project.name}** (\`${project.id}\`)\nPath: \`${project.path}\``
+          title: '✓ 项目已删除',
+          content: `成功删除项目:\n\n**${project.name}** (\`${project.id}\`)\n路径: \`${project.path}\``
         }
       })
     } catch (error) {
       logger.error({ msg: 'Failed to remove project', error })
-      await this.channelSendText(message.chatId, `⚠️ Failed to remove project: ${(error as Error).message}`)
+      await this.channelSendText(message.chatId, `⚠️ 删除项目失败: ${(error as Error).message}`)
     }
   }
 
   private getCurrentProjectName(): string {
     const project = this.bot.projects.find(p => p.id === this.bot.currentProjectId)
-    return project?.name || 'Unknown'
+    return project?.name || '未知'
   }
 }
