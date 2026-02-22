@@ -108,6 +108,58 @@ class ConfigManager {
   isAdmin(userId: string): boolean {
     return this.getAdminOpenIds().includes(userId)
   }
+
+  async save(): Promise<void> {
+    if (!this.config) {
+      throw new Error('Configuration not loaded')
+    }
+    await fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2), 'utf-8')
+    logger.info({ msg: 'Configuration saved successfully' })
+  }
+
+  getConfig(): XtBotConfig {
+    if (!this.config) {
+      throw new Error('Configuration not loaded')
+    }
+    return this.config
+  }
+
+  async addProject(botId: string, project: Project): Promise<void> {
+    if (!this.config) {
+      throw new Error('Configuration not loaded')
+    }
+    const bot = this.config.bots.find(b => b.id === botId)
+    if (!bot) {
+      throw new Error(`Bot '${botId}' not found`)
+    }
+    if (bot.projects.find(p => p.id === project.id)) {
+      throw new Error(`Project with id '${project.id}' already exists`)
+    }
+    bot.projects.push(project)
+    await this.save()
+  }
+
+  async removeProject(botId: string, projectId: string): Promise<void> {
+    if (!this.config) {
+      throw new Error('Configuration not loaded')
+    }
+    const bot = this.config.bots.find(b => b.id === botId)
+    if (!bot) {
+      throw new Error(`Bot '${botId}' not found`)
+    }
+    const index = bot.projects.findIndex(p => p.id === projectId)
+    if (index === -1) {
+      throw new Error(`Project '${projectId}' not found`)
+    }
+    if (bot.projects.length === 1) {
+      throw new Error('Cannot remove the last project')
+    }
+    bot.projects.splice(index, 1)
+    if (bot.currentProjectId === projectId) {
+      bot.currentProjectId = bot.projects[0].id
+    }
+    await this.save()
+  }
 }
 
 export const configManager = new ConfigManager()
