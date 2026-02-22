@@ -74,7 +74,7 @@ export class MessageBridge {
         type: 'status' as const,
         content: {
           status: 'thinking' as const,
-          title: 'Claude 正在思考...',
+          title: '玄瞳开发助手正在思考...',
           content: `项目: **${project.name}**\n\n${message.text}`
         }
       }
