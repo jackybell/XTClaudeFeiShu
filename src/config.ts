@@ -17,7 +17,8 @@ class ConfigManager {
       const parsedConfig = JSON.parse(content) as XtBotConfig
       this.validateConfig(parsedConfig)
       this.config = parsedConfig
-      logger.info('Configuration loaded successfully', {
+      logger.info({
+        msg: 'Configuration loaded successfully',
         botsCount: this.config.bots.length
       })
       return this.config
