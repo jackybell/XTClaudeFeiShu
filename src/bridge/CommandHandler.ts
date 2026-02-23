@@ -1,4 +1,4 @@
-import type { Command, Message, Bot } from '../types/index.js'
+import type { Command, Message, Bot, Session } from '../types/index.js'
 import { sessionManager } from './SessionManager.js'
 import { configManager } from '../config.js'
 import { taskQueue } from './TaskQueue.js'
@@ -51,7 +51,43 @@ export class CommandHandler {
   }
 
   async handle(message: Message): Promise<boolean> {
-    const command = this.parseCommand(message.text)
+    // 首先检查用户是否有等待中的会话
+    const sessionKey = `${this.bot.id}:${message.userId}`
+    const session = sessionManager.getSession(this.bot.id, message.userId)
+
+    if (session?.state) {
+      const { status, executionHandle } = session.state
+
+      // 检查是否在等待输入
+      if (status === 'waiting_input' || status === 'waiting_confirm') {
+        // 检查是否是命令（用户想要取消）
+        const command = this.parseCommand(message.text)
+        if (command) {
+          // 用户发送了命令，取消等待
+          logger.info({ msg: 'Command received during waiting, canceling waiting', command })
+          if (executionHandle) {
+            executionHandle.finish()
+          }
+          sessionManager.clearState(sessionKey)
+
+          // 执行命令
+          const handled = await this.executeCommand(message, command)
+          return handled
+        }
+
+        // 发送用户响应到 SDK
+        await this.sendUserResponse(session, message)
+        return true
+      }
+    }
+
+    // 正常命令处理
+    const isCommand = await this.executeCommand(message, this.parseCommand(message.text))
+    return isCommand
+  }
+
+  // 重命名现有的 handle 方法逻辑为 executeCommand
+  private async executeCommand(message: Message, command: Command | null): Promise<boolean> {
     if (!command) {
       return false
     }
@@ -83,6 +119,32 @@ export class CommandHandler {
     }
 
     return true
+  }
+
+  // 添加新方法来处理用户响应
+  private async sendUserResponse(session: Session, message: Message): Promise<void> {
+    const { executionHandle, inputRequest, chatId } = session.state!
+
+    if (!executionHandle) {
+      await this.channelSendText(chatId, '会话已过期，请重新开始')
+      return
+    }
+
+    logger.info({ msg: 'Sending user response to SDK', text: message.text })
+
+    try {
+      // 发送响应到 SDK
+      executionHandle.sendMessage(message.text)
+
+      // 更新状态回执行中
+      sessionManager.setStatus(session.botId + ':' + session.userId, 'executing')
+
+      // 通知用户
+      await this.channelSendText(chatId, '已收到你的回复，继续执行...')
+    } catch (error) {
+      logger.error({ msg: 'Error sending response to SDK', error })
+      await this.channelSendText(chatId, `发送响应失败: ${error}`)
+    }
   }
 
   private async handleSwitch(message: Message, command: Command): Promise<void> {
