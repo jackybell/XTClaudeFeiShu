@@ -1,3 +1,28 @@
+// 会话状态类型
+export enum SessionStatus {
+  IDLE = 'idle',
+  EXECUTING = 'executing',
+  WAITING_INPUT = 'waiting_input',
+  WAITING_CONFIRM = 'waiting_confirm'
+}
+
+// 输入请求类型
+export interface InputRequest {
+  type: 'confirmation' | 'text' | 'choice'
+  prompt: string
+  options?: string[]
+}
+
+// 会话状态
+export interface SessionState {
+  status: SessionStatus
+  currentTaskId: string
+  executionHandle?: any  // Will be ExecutionHandle from ClaudeExecutor
+  inputRequest?: InputRequest
+  expiresAt: number
+  chatId: string
+}
+
 // 渠道消息类型
 export interface Message {
   chatId: string
@@ -63,6 +88,7 @@ export interface Session {
   claudeSessionId: string
   createdAt: Date
   lastActiveAt: Date
+  state?: SessionState  // Add this
 }
 
 // 命令类型
