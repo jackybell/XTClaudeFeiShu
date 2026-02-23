@@ -30,17 +30,17 @@ export class MessageBridge {
       bot,
       (chatId, text) => this.channel.sendText(chatId, text),
       (chatId, card) => this.channel.sendCard(chatId, card),
-      this // Pass MessageBridge reference for /status command
+      this // 传递 MessageBridge 引用给 /status 命令
     )
     this.claudeExecutor = new ClaudeExecutor()
   }
 
   async handle(message: Message): Promise<void> {
-    // Check if command first
+    // 首先检查是否是命令
     const isCommand = await this.commandHandler.handle(message)
     if (isCommand) return
 
-    // Get user's selected project
+    // 获取用户选择的项目
     const projectId = sessionManager.getUserProject(
       this.bot.id,
       message.userId,
@@ -52,12 +52,12 @@ export class MessageBridge {
       return
     }
 
-    // Check if a task is already running for this bot/project
+    // 检查该机器人的项目是否已有任务在运行
     if (taskQueue.isRunning(this.bot.id, project.id)) {
-      // Enqueue task - it will wait
+      // 将任务加入队列 - 它会等待
       const queuedTask = taskQueue.enqueue(this.bot.id, project.id, message, project)
 
-      // Send queued notification to user
+      // 向用户发送已排队的通知
       await this.channel.sendText(message.chatId,
         `任务已加入队列。当前位置: 第 ${queuedTask.position! + 1} 位\n当前有任务正在执行，请稍候...`
       )
@@ -71,16 +71,16 @@ export class MessageBridge {
       return
     }
 
-    // No task running, execute immediately
+    // 没有任务运行，立即执行
     const task = taskQueue.enqueue(this.bot.id, project.id, message, project)
     await this.executeTask(task)
   }
 
   /**
-   * Process next task in queue after current task completes
+   * 在当前任务完成后处理队列中的下一个任务
    */
   private async processNextTask(botId: string, projectId: string): Promise<void> {
-    // Wait a bit before processing next task
+    // 处理下一个任务前稍等片刻
     await new Promise(resolve => setTimeout(resolve, 1000))
 
     const nextTask = taskQueue.getNext(botId, projectId)
@@ -90,7 +90,7 @@ export class MessageBridge {
         taskId: nextTask.id
       })
 
-      // Notify user that their task is starting
+      // 通知用户他们的任务开始了
       await this.channel.sendText(nextTask.message.chatId, '轮到你的任务了，开始执行...')
 
       await this.executeTask(nextTask)
@@ -99,7 +99,7 @@ export class MessageBridge {
 
   private async executeTask(task: QueuedTask): Promise<void> {
     const { message, project } = task
-    const taskDisplayId = task.id.slice(5, 18) // Short ID for display (timestamp portion), accessible in catch block
+    const taskDisplayId = task.id.slice(5, 18) // 用于显示的短 ID（时间戳部分），在 catch 块中也可访问
     this.currentTaskId = task.id
     this.outputFiles = []
     this.toolCalls = []
@@ -109,30 +109,30 @@ export class MessageBridge {
     this.pendingUpdate = null
     this.pendingCardContent = null
 
-    // Start file watcher
+    // 启动文件监听器
     this.fileWatcher = new FileWatcher(project.path, (event) =>
       this.handleFileChange(event, message.chatId)
     )
     this.fileWatcher.start()
 
     try {
-      // Send thinking card and save card ID
+      // 发送思考中卡片并保存卡片 ID
       const thinkingCard = {
         type: 'status' as const,
         content: {
           status: 'thinking' as const,
-          title: `思考中... [${taskDisplayId}]`,
+          title: `玄瞳开发助手正在思考... [${taskDisplayId}]`,
           content: `项目: **${project.name}**\n\n${message.text}`
         }
       }
       this.currentCardId = await this.channel.sendCard(message.chatId, thinkingCard)
       logger.info({ msg: 'Initial card sent', cardId: this.currentCardId })
 
-      // Get or create session
+      // 获取或创建会话
       const session = sessionManager.getSession(this.bot.id, message.userId)
       const sessionId = session?.claudeSessionId
 
-      // Execute Claude using async generator
+      // 使用异步生成器执行 Claude
       let responseText = ''
       const abortController = new AbortController()
 
@@ -149,13 +149,13 @@ export class MessageBridge {
         plugins: project.plugins,
       })
 
-      // Process messages from the generator
+      // 处理来自生成器的消息
       for await (const sdkMessage of stream) {
         if (abortController.signal.aborted) break
 
-        // Handle different message types from SDK
+        // 处理来自 SDK 的不同消息类型
         if (sdkMessage.type === 'system') {
-          // Skills discovered
+          // 发现技能
           if (sdkMessage.subtype === 'init' || sdkMessage.subtype === 'config_change') {
             const skills = (sdkMessage as any).skills || (sdkMessage as any).slash_commands || []
             if (skills.length > 0) {
@@ -163,7 +163,7 @@ export class MessageBridge {
             }
           }
         } else if (sdkMessage.type === 'stream_event') {
-          // Streaming content delta
+          // 流式内容增量
           const event = sdkMessage.event
           if (event?.type === 'content_block_delta') {
             const delta = event.delta
@@ -179,7 +179,7 @@ export class MessageBridge {
             }
           }
         } else if (sdkMessage.type === 'assistant') {
-          // Full assistant message
+          // 完整的助手消息
           const content = sdkMessage.message?.content
           if (content) {
             for (const block of content) {
@@ -193,7 +193,7 @@ export class MessageBridge {
             }
           }
         } else if (sdkMessage.type === 'result') {
-          // Execution result
+          // 执行结果
           logger.info({ msg: 'Result message received', result_type: sdkMessage.result_type })
 
           if (sdkMessage.result_type === 'error_during_execution') {
@@ -205,7 +205,7 @@ export class MessageBridge {
             throw new Error(`Max budget ($${sdkMessage.max_budget_usd}) exceeded`)
           }
 
-          // Successful completion - save session
+          // 成功完成 - 保存会话
           if (sdkMessage.session_id) {
             sessionManager.getOrCreateSession(
               this.bot.id,
@@ -219,13 +219,13 @@ export class MessageBridge {
 
       logger.info({ msg: 'Claude execute finished', responseTextLength: responseText.length })
 
-      // Clear any pending update before sending final card
+      // 在发送最终卡片之前清除所有待处理的更新
       if (this.pendingUpdate) {
         clearTimeout(this.pendingUpdate)
         this.pendingUpdate = null
       }
 
-      // Final result card - update existing card
+      // 最终结果卡片 - 更新现有卡片
       logger.info({ msg: 'Preparing final result card', currentCardId: this.currentCardId })
       const duration = this.startTime ? Date.now() - this.startTime : 0
       const finalCard = {
@@ -250,10 +250,10 @@ export class MessageBridge {
         logger.info({ msg: 'Final result card sent successfully', cardId: this.currentCardId })
       }
 
-      // Mark task as completed
+      // 标记任务为已完成
       taskQueue.complete(task.id!)
 
-      // Process next task in queue
+      // 处理队列中的下一个任务
       await this.processNextTask(this.bot.id, project.id)
 
     } catch (error) {
@@ -261,10 +261,10 @@ export class MessageBridge {
       const errorStack = error instanceof Error ? error.stack : undefined
       logger.error({ msg: 'Task execution error', error: errorMessage, stack: errorStack })
 
-      // Mark task as failed
+      // 标记任务为失败
       taskQueue.fail(task.id!, errorMessage)
 
-      // Clear any pending update before sending error card
+      // 在发送错误卡片之前清除所有待处理的更新
       if (this.pendingUpdate) {
         clearTimeout(this.pendingUpdate)
         this.pendingUpdate = null
@@ -285,12 +285,12 @@ export class MessageBridge {
         this.currentCardId = await this.channel.sendCard(message.chatId, errorCard)
       }
 
-      // Still process next task even if this one failed
+      // 即使此任务失败，仍处理下一个任务
       await this.processNextTask(this.bot.id, project.id)
 
     } finally {
       this.fileWatcher?.stop()
-      // Reset state
+      // 重置状态
       this.lastUpdateTime = 0
       this.pendingUpdate = null
       this.pendingCardContent = null
@@ -299,7 +299,7 @@ export class MessageBridge {
   }
 
   private async updateCard(chatId: string, project: Project, responseText: string): Promise<void> {
-    // Use updateCard if we have a cardId, otherwise send new card
+    // 如果有 cardId 则使用 updateCard，否则发送新卡片
     const duration = this.startTime ? Date.now() - this.startTime : 0
     const card = {
       type: 'status' as const,
@@ -312,16 +312,16 @@ export class MessageBridge {
       }
     }
 
-    // Throttle updates to avoid Feishu rate limit
+    // 节流更新以避免飞书速率限制
     const now = Date.now()
     const timeSinceLastUpdate = now - this.lastUpdateTime
-    const minUpdateInterval = 5000 // 5 seconds between updates
+    const minUpdateInterval = 5000 // 更新间隔 5 秒
 
-    // Store pending card content
+    // 存储待处理的卡片内容
     this.pendingCardContent = { chatId, card }
 
     if (timeSinceLastUpdate < minUpdateInterval) {
-      // Schedule update for later
+      // 安排稍后更新
       if (this.pendingUpdate) {
         clearTimeout(this.pendingUpdate)
       }
@@ -331,7 +331,7 @@ export class MessageBridge {
       return
     }
 
-    // Clear any pending timeout and do immediate update
+    // 清除所有待处理的超时并立即更新
     if (this.pendingUpdate) {
       clearTimeout(this.pendingUpdate)
       this.pendingUpdate = null
@@ -349,11 +349,11 @@ export class MessageBridge {
     logger.info({ msg: 'doUpdateCard called', currentCardId: this.currentCardId })
 
     if (this.currentCardId) {
-      // Update existing card
+      // 更新现有卡片
       await this.channel.updateCard(chatId, this.currentCardId, card)
       this.lastUpdateTime = Date.now()
     } else {
-      // Send new card (fallback)
+      // 发送新卡片（后备方案）
       logger.warn({ msg: 'No cardId, sending new card instead of update' })
       this.currentCardId = await this.channel.sendCard(chatId, card)
       this.lastUpdateTime = Date.now()
@@ -379,7 +379,7 @@ export class MessageBridge {
   }
 
   /**
-   * Get queue status for current user's project
+   * 获取当前用户项目的队列状态
    */
   getQueueStatus(message: Message): { stats: any; tasks: any[] } | null {
     const projectId = sessionManager.getUserProject(

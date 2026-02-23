@@ -36,7 +36,7 @@ export class FileWatcher {
   }
 
   private async handleFileChange(type: 'add' | 'change', path: string): Promise<void> {
-    // Ignore temporary files (tmpclaude* directories/files)
+    // 忽略临时文件（tmpclaude* 目录/文件）
     const fileName = path.split(/[/\\]/).pop() || path
     if (fileName.startsWith('tmpclaude')) {
       logger.debug({ msg: 'Ignoring temp file', path })
@@ -46,7 +46,7 @@ export class FileWatcher {
     const now = Date.now()
     const lastSent = this.fileSentTimestamps.get(path)
 
-    // Debounce: don't send same file within 5 seconds
+    // 防抖：5 秒内不发送相同文件
     if (lastSent && now - lastSent < this.DEBOUNCE_MS) {
       logger.debug({ msg: 'File change debounced', path })
       return

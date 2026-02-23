@@ -1,4 +1,4 @@
-// Channel message types
+// 渠道消息类型
 export interface Message {
   chatId: string
   userId: string
@@ -21,7 +21,7 @@ export interface Card {
   content: any
 }
 
-// Bot configuration
+// 机器人配置
 export interface Project {
   id: string
   name: string
@@ -49,7 +49,7 @@ export interface XtBotConfig {
   bots: Bot[]
 }
 
-// Session types
+// 会话类型
 export interface UserProjectSelection {
   botId: string
   userId: string
@@ -65,7 +65,7 @@ export interface Session {
   lastActiveAt: Date
 }
 
-// Command types
+// 命令类型
 export interface Command {
   type: 'switch' | 'reset' | 'stop' | 'help' | 'skills' | 'projects'
   args: string[]

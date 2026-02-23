@@ -16,7 +16,7 @@ export function buildCard(config: CardConfig): any {
     elements: []
   }
 
-  // Header with title
+  // 带标题的头部
   if (config.title) {
     card.header = {
       title: {
@@ -27,7 +27,7 @@ export function buildCard(config: CardConfig): any {
     }
   }
 
-  // Status indicator
+  // 状态指示器
   if (config.status) {
     const statusColors = {
       thinking: 'grey',
@@ -48,7 +48,7 @@ export function buildCard(config: CardConfig): any {
     }
   }
 
-  // Content
+  // 内容
   if (config.content) {
     card.elements.push({
       tag: 'div',
@@ -59,7 +59,7 @@ export function buildCard(config: CardConfig): any {
     })
   }
 
-  // Tool calls
+  // 工具调用
   if (config.toolCalls && config.toolCalls.length > 0) {
     card.elements.push({
       tag: 'hr'
@@ -75,7 +75,7 @@ export function buildCard(config: CardConfig): any {
     })
   }
 
-  // Output files
+  // 输出文件
   if (config.outputFiles && config.outputFiles.length > 0) {
     card.elements.push({
       tag: 'hr'
@@ -91,7 +91,7 @@ export function buildCard(config: CardConfig): any {
     })
   }
 
-  // Cost and duration
+  // 费用和耗时
   if (config.cost !== undefined || config.duration !== undefined) {
     card.elements.push({
       tag: 'hr'

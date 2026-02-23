@@ -1,39 +1,39 @@
 import type { Message, Card } from '../types/index.js'
 
 export interface IChannel {
-  // Channel metadata
+  // 渠道元数据
   readonly channelType: string
 
-  // Initialize channel (setup WebSocket, etc.)
+  // 初始化渠道（设置 WebSocket 等）
   initialize(): Promise<void>
 
-  // Start listening for messages
+  // 开始监听消息
   onMessage(callback: (message: Message) => void | Promise<void>): void
 
-  // Send text message
+  // 发送文本消息
   sendText(chatId: string, text: string): Promise<void>
 
-  // Send card message, returns card/message ID
+  // 发送卡片消息，返回卡片/消息 ID
   sendCard(chatId: string, card: Card): Promise<string>
 
-  // Update existing card
+  // 更新现有卡片
   updateCard(chatId: string, cardId: string, card: Card): Promise<void>
 
-  // Send file
+  // 发送文件
   sendFile(chatId: string, filePath: string): Promise<void>
 
-  // Get user info
+  // 获取用户信息
   getUserInfo(userId: string): Promise<{ name: string; avatar?: string }>
 
-  // Verify if message is authentic
+  // 验证消息是否真实
   verifyAuth(event: any): boolean
 
-  // Check if message mentions the bot (for group chats)
+  // 检查消息是否提及机器人（用于群聊）
   isMentioned(event: any, botId: string): boolean
 
-  // Extract message content
+  // 提取消息内容
   extractMessage(event: any): { text: string; images?: string[]; files?: any[] }
 
-  // Shutdown channel
+  // 关闭渠道
   shutdown(): Promise<void>
 }

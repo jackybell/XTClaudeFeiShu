@@ -5,7 +5,7 @@ import { MessageBridge } from './bridge/MessageBridge.js'
 import { sessionManager } from './bridge/SessionManager.js'
 import { logger } from './utils/logger.js'
 
-// Set UTF-8 encoding for Windows console to fix Chinese character display
+// 为 Windows 控制台设置 UTF-8 编码以修复中文显示问题
 if (process.platform === 'win32') {
   process.stdout.setEncoding('utf8')
   process.stderr.setEncoding('utf8')
@@ -13,35 +13,35 @@ if (process.platform === 'win32') {
 
 async function main() {
   try {
-    // Load configuration
+    // 加载配置
     await configManager.load()
 
-    // Start session cleanup interval
+    // 启动会话清理定时器
     sessionManager.startCleanupInterval()
 
-    // Initialize bots
+    // 初始化机器人
     const bots = configManager.getBots()
     const bridges: MessageBridge[] = []
 
     for (const botConfig of bots) {
       logger.info({ msg: 'Initializing bot', name: botConfig.name })
 
-      // Create channel
+      // 创建渠道
       const channel = new FeishuChannel(
         botConfig.feishuAppId,
         botConfig.feishuAppSecret,
-        botConfig.feishuAppId // Use appId as botId for now
+        botConfig.feishuAppId // 暂时使用 appId 作为 botId
       )
 
-      // Create bridge
+      // 创建消息桥接器
       const bridge = new MessageBridge(botConfig, channel)
 
-      // Setup message handler
+      // 设置消息处理器
       channel.onMessage(async (message) => {
         await bridge.handle(message)
       })
 
-      // Initialize channel
+      // 初始化渠道
       await channel.initialize()
 
       bridges.push(bridge)
@@ -49,10 +49,10 @@ async function main() {
 
     logger.info({ msg: 'Started', botCount: bridges.length })
 
-    // Graceful shutdown
+    // 优雅关闭
     process.on('SIGINT', async () => {
       logger.info({ msg: 'Shutting down...' })
-      // Channels will be cleaned up automatically
+      // 渠道会自动清理
       process.exit(0)
     })
 

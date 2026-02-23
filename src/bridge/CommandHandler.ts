@@ -22,12 +22,12 @@ export class CommandHandler {
     }
 
     const parts = trimmed.split(/\s+/)
-    const command = parts[0].slice(1) // Remove /
+    const command = parts[0].slice(1) // 移除 /
     const args = parts.slice(1)
     const options: { clear?: boolean } = {}
     let subCommand: 'list' | 'add' | 'remove' | undefined
 
-    // Parse sub-command for /projects
+    // 解析 /projects 的子命令
     if (command === 'projects' && args.length > 0) {
       const sub = args[0]
       if (sub === 'list' || sub === 'add' || sub === 'remove') {
@@ -35,7 +35,7 @@ export class CommandHandler {
       }
     }
 
-    // Parse options
+    // 解析选项
     const clearIndex = args.indexOf('--clear')
     if (clearIndex !== -1) {
       options.clear = true
@@ -108,10 +108,10 @@ export class CommandHandler {
       return
     }
 
-    // Update user's project selection
+    // 更新用户的项目选择
     sessionManager.setUserProject(this.bot.id, message.userId, project.id)
 
-    // Handle --clear option
+    // 处理 --clear 选项
     if (command.options.clear) {
       sessionManager.deleteSession(this.bot.id, message.userId)
     }
@@ -132,7 +132,7 @@ export class CommandHandler {
   }
 
   private async handleStop(message: Message): Promise<void> {
-    // Get user's selected project
+    // 获取用户选择的项目
     const projectId = sessionManager.getUserProject(
       this.bot.id,
       message.userId,
@@ -143,7 +143,7 @@ export class CommandHandler {
       return
     }
 
-    // Check if user has any waiting tasks in the queue
+    // 检查用户是否有等待中的任务
     const tasks = taskQueue.getTasks(this.bot.id, projectId)
     const myWaitingTasks = tasks.filter(t =>
       t.message.userId === message.userId && t.status === 'waiting'
@@ -154,7 +154,7 @@ export class CommandHandler {
       return
     }
 
-    // Cancel all waiting tasks for this user
+    // 取消该用户的所有等待任务
     let cancelledCount = 0
     for (const task of myWaitingTasks) {
       if (taskQueue.cancel(task.id)) {
@@ -181,7 +181,7 @@ export class CommandHandler {
 
     const { stats, tasks } = queueInfo
 
-    // Build status message
+    // 构建状态消息
     const runningTask = tasks.find(t => t.status === 'running')
     const myWaitingTasks = tasks.filter(t => t.isMine && t.status === 'waiting')
     const otherWaitingTasks = tasks.filter(t => !t.isMine && t.status === 'waiting')
@@ -330,13 +330,13 @@ export class CommandHandler {
   }
 
   private async handleProjectsAdd(message: Message, command: Command): Promise<void> {
-    // Check admin permission
+    // 检查管理员权限
     if (!configManager.isAdmin(message.userId)) {
       await this.channelSendText(message.chatId, '⚠️ 只有管理员可以添加项目。')
       return
     }
 
-    const args = command.args.slice(1) // Remove 'add' subcommand
+    const args = command.args.slice(1) // 移除 'add' 子命令
     if (args.length < 3) {
       await this.channelSendCard(message.chatId, {
         type: 'status',
@@ -353,13 +353,13 @@ export class CommandHandler {
     const projectName = args[1]
     const projectPath = args[2]
 
-    // Check if project already exists
+    // 检查项目是否已存在
     if (this.bot.projects.find(p => p.id === projectId)) {
       await this.channelSendText(message.chatId, `⚠️ 项目 id "${projectId}" 已存在。`)
       return
     }
 
-    // Check if path exists
+    // 检查路径是否存在
     try {
       await fs.access(projectPath)
     } catch {
@@ -379,7 +379,7 @@ export class CommandHandler {
 
     try {
       await configManager.addProject(this.bot.id, newProject)
-      // Note: configManager already updates the in-memory config, no need to push again
+      // 注意：configManager 已经更新了内存中的配置，无需再次推送
 
       await this.channelSendCard(message.chatId, {
         type: 'status',
@@ -396,13 +396,13 @@ export class CommandHandler {
   }
 
   private async handleProjectsRemove(message: Message, command: Command): Promise<void> {
-    // Check admin permission
+    // 检查管理员权限
     if (!configManager.isAdmin(message.userId)) {
       await this.channelSendText(message.chatId, '⚠️ 只有管理员可以删除项目。')
       return
     }
 
-    const args = command.args.slice(1) // Remove 'remove' subcommand
+    const args = command.args.slice(1) // 移除 'remove' 子命令
     if (args.length < 1) {
       await this.channelSendCard(message.chatId, {
         type: 'status',
@@ -425,7 +425,7 @@ export class CommandHandler {
 
     try {
       await configManager.removeProject(this.bot.id, projectId)
-      // Note: configManager already updates the in-memory config
+      // 注意：configManager 已经更新了内存中的配置
 
       await this.channelSendCard(message.chatId, {
         type: 'status',

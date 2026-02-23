@@ -4,13 +4,13 @@ import path from 'path'
 
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
-// Ensure logs directory exists
+// 确保日志目录存在
 const logsDir = path.join(process.cwd(), 'logs')
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true })
 }
 
-// Create streams for file logging
+// 创建文件日志流
 const logFile = path.join(logsDir, 'app.log')
 const errorLogFile = path.join(logsDir, 'error.log')
 
@@ -22,7 +22,7 @@ export const logger = pino({
     }
   }
 }, pino.multistream([
-  // Console output with pretty print
+  // 控制台输出（美化格式）
   {
     level: process.env.LOG_LEVEL || 'info',
     stream: pino.transport({
@@ -35,12 +35,12 @@ export const logger = pino({
       }
     })
   },
-  // All logs to file
+  // 所有日志写入文件
   {
     level: 'trace',
     stream: pino.destination({ dest: logFile, sync: false })
   },
-  // Error logs to separate file
+  // 错误日志写入单独文件
   {
     level: 'error',
     stream: pino.destination({ dest: errorLogFile, sync: false })

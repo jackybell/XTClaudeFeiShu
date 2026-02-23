@@ -33,7 +33,7 @@ export type SDKMessage = {
       input?: unknown
     }>
   }
-  // Result fields
+  // 结果字段
   duration_ms?: number
   duration_api_ms?: number
   total_cost_usd?: number
@@ -45,7 +45,7 @@ export type SDKMessage = {
   error?: string
   max_turns?: number
   max_budget_usd?: number
-  // Stream event fields
+  // 流事件字段
   event?: {
     type: string
     index?: number
@@ -72,10 +72,10 @@ export interface ExecutionHandle {
 
 export class ClaudeExecutor {
   private buildQueryOptions(options: ExecutorOptions): Record<string, unknown> {
-    // Pass environment variables to child process (for ANTHROPIC_AUTH_TOKEN, etc.)
+    // 将环境变量传递给子进程（用于 ANTHROPIC_AUTH_TOKEN 等）
     // const env: Record<string, string> = {
     //   ...process.env,
-    //   // Ensure critical environment variables are passed
+    //   // 确保关键环境变量被传递
     // }
     const queryOptions: Record<string, unknown> = {
       allowedTools: options.allowedTools,
@@ -84,26 +84,26 @@ export class ClaudeExecutor {
       cwd: options.cwd,
       abortController: options.abortController,
       includePartialMessages: true,
-      extraArgs: { verbose: null },  // Required for includePartialMessages to work
-      // Load MCP servers and settings from user/project config files
+      extraArgs: { verbose: null },  // includePartialMessages 工作所必需的
+      // 从用户/项目配置文件加载 MCP 服务器和设置
       settingSources: ['user', 'project'],
     }
 
-    // Configure Claude executable path based on platform
+    // 根据平台配置 Claude 可执行文件路径
     const claudeExecutablePath = process.env.CLAUDE_EXECUTABLE_PATH
     const isWindows = os.platform() === 'win32'
 
     if (claudeExecutablePath) {
       if (isWindows && claudeExecutablePath.endsWith('.cmd')) {
-        // On Windows, .cmd files cannot be spawned directly
-        // Use node executable with cli.js as argument
+        // 在 Windows 上，.cmd 文件不能直接生成
+        // 使用 node 可执行文件并将 cli.js 作为参数
         const cmdDir = path.dirname(claudeExecutablePath)
         const cliJsPath = path.join(cmdDir, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js')
         queryOptions.executable = 'node' as const
         queryOptions.executableArgs = [cliJsPath]
         logger.info({ msg: 'Using Claude Code executable (Windows)', cliJsPath })
       } else {
-        // On Unix/Linux/macOS, use the executable path directly
+        // 在 Unix/Linux/macOS 上，直接使用可执行文件路径
         queryOptions.pathToClaudeCodeExecutable = claudeExecutablePath
         logger.info({ msg: 'Using Claude Code executable', path: claudeExecutablePath })
       }
@@ -111,7 +111,7 @@ export class ClaudeExecutor {
       logger.info({ msg: 'Using default Claude API (ANTHROPIC_API_KEY from env)' })
     }
 
-    // Build system prompt appendix from sections
+    // 从部分构建系统提示附录
     const appendSections: string[] = []
 
     if (options.outputsDir) {
@@ -138,7 +138,7 @@ export class ClaudeExecutor {
       queryOptions.resume = options.sessionId
     }
 
-    // Enable skills support if requested
+    // 如果请求，启用技能支持
     if (options.enableSkills) {
       queryOptions.settingSources = options.settingSources || ['user','project']
       queryOptions.plugins = options.plugins || []
@@ -153,7 +153,7 @@ export class ClaudeExecutor {
   }
 
   /**
-   * Start a multi-turn execution session that allows sending tool results back to Claude
+   * 启动多轮执行会话，允许将工具结果发送回 Claude
    */
   startExecution(options: ExecutorOptions): ExecutionHandle {
     const { prompt, cwd, sessionId, abortController } = options
@@ -162,7 +162,7 @@ export class ClaudeExecutor {
 
     const inputQueue = new AsyncQueue<SDKUserMessage>()
 
-    // Push the initial user message
+    // 推送初始用户消息
     const initialMessage: SDKUserMessage = {
       type: 'user',
       message: {
@@ -223,7 +223,7 @@ export class ClaudeExecutor {
   }
 
   /**
-   * Simple one-shot execution (returns async generator of messages)
+   * 简单的一次性执行（返回消息的异步生成器）
    */
   async *execute(options: ExecutorOptions): AsyncGenerator<SDKMessage> {
     const { prompt, cwd, sessionId, abortController } = options

@@ -14,13 +14,13 @@ export class FeishuChannel implements IChannel {
   private wsClient: lark.WSClient
   private eventDispatcher: lark.EventDispatcher
   private messageCallback?: (message: Message) => void | Promise<void>
-  // Event deduplication: track processed event IDs
+  // 事件去重：跟踪已处理的事件 ID
   private processedEvents = new Set<string>()
   private readonly MAX_PROCESSED_EVENTS = 1000
 
   constructor(
     private appId: string,
-    appSecret: string,
+    private appSecret: string,
     botId: string
   ) {
     this.client = new lark.Client({
@@ -52,19 +52,19 @@ export class FeishuChannel implements IChannel {
 
   private async handleEvent(event: any): Promise<void> {
     try {
-      // Extract event ID for deduplication
+      // 提取事件 ID 用于去重
       const eventId = event?.header?.event_id || event?.event_id || JSON.stringify(event)
 
-      // Check if event was already processed
+      // 检查事件是否已处理过
       if (this.processedEvents.has(eventId)) {
         logger.warn({ msg: 'Duplicate event detected, skipping', eventId })
         return
       }
 
-      // Add to processed events
+      // 添加到已处理事件
       this.processedEvents.add(eventId)
 
-      // Clean up old event IDs to prevent memory leak
+      // 清理旧的事件 ID 以防止内存泄漏
       if (this.processedEvents.size > this.MAX_PROCESSED_EVENTS) {
         const firstEvent = this.processedEvents.values().next().value
         this.processedEvents.delete(firstEvent)
@@ -72,7 +72,7 @@ export class FeishuChannel implements IChannel {
 
       logger.info({ msg: 'Event received', eventId, eventKeys: Object.keys(event) })
 
-      // Check event structure
+      // 检查事件结构
       const eventType = event?.header?.event_type || event?.event_type
       logger.info({ msg: 'Event type', eventType, eventId })
 
@@ -133,7 +133,7 @@ export class FeishuChannel implements IChannel {
         content: JSON.stringify(cardConfig)
       }
     })
-    // Return message ID for later updates
+    // 返回消息 ID 用于后续更新
     const messageId = result?.data?.message_id || result?.message_id || ''
     logger.info({ msg: 'Card sent', cardId: messageId, cardType: card.type, hasMessageId: !!messageId })
     return messageId
@@ -153,22 +153,22 @@ export class FeishuChannel implements IChannel {
       })
       logger.info({ msg: 'Card updated', cardId })
     } catch (error: any) {
-      // Handle Feishu rate limit error gracefully
+      // 优雅处理飞书速率限制错误
       if (error?.response?.data?.code === 230020) {
         logger.warn({ msg: 'Rate limit hit, skipping card update', cardId })
         return
       }
-      // Re-throw other errors
+      // 重新抛出其他错误
       throw error
     }
   }
 
   async sendFile(chatId: string, filePath: string): Promise<void> {
-    // Upload file first, then send
+    // 先上传文件，然后发送
     const fileName = filePath.split('/').pop() as string
     const fileStream = createReadStream(filePath)
 
-    // Use drive.file.uploadAll for general file upload
+    // 使用 drive.file.uploadAll 进行通用文件上传
     const uploadResult = await this.client.drive.file.uploadAll({
       data: {
         file_name: fileName,
@@ -183,7 +183,7 @@ export class FeishuChannel implements IChannel {
       throw new Error('Failed to upload file')
     }
 
-    // Send file message
+    // 发送文件消息
     await this.client.im.message.create({
       params: {
         receive_id_type: 'chat_id'
@@ -233,7 +233,7 @@ export class FeishuChannel implements IChannel {
 
   private toCardConfig(card: Card): any {
     if (card.type === 'text') {
-      // Return card config in correct Feishu format
+      // 返回正确飞书格式的卡片配置
       return {
         config: {
           wide_screen_mode: true

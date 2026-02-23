@@ -21,25 +21,25 @@ export interface TaskQueueStats {
 }
 
 export class TaskQueue {
-  // Queue key: "botId:projectId"
+  // 队列键："botId:projectId"
   private queues: Map<string, QueuedTask[]> = new Map()
   private runningTasks: Set<string> = new Map<`${string}:${string}`, string>()
 
   /**
-   * Get queue key for bot and project
+   * 获取机器人和项目的队列键
    */
   private getQueueKey(botId: string, projectId: string): string {
     return `${botId}:${projectId}`
   }
 
   /**
-   * Enqueue a task. Returns the task ID and whether it will run immediately.
+   * 将任务加入队列。返回任务 ID 和是否立即运行。
    */
   enqueue(botId: string, projectId: string, message: Message, project: Project): QueuedTask {
     const key = this.getQueueKey(botId, projectId)
     const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(7)}`
 
-    // Get or create queue
+    // 获取或创建队列
     let queue = this.queues.get(key)
     if (!queue) {
       queue = []
@@ -57,7 +57,7 @@ export class TaskQueue {
 
     queue.push(task)
 
-    // Update positions for all waiting tasks
+    // 更新所有等待中任务的位置
     this.updatePositions(key)
 
     logger.info({
@@ -73,7 +73,7 @@ export class TaskQueue {
   }
 
   /**
-   * Get the next task from queue for execution
+   * 从队列中获取下一个要执行的任务
    */
   getNext(botId: string, projectId: string): QueuedTask | null {
     const key = this.getQueueKey(botId, projectId)
@@ -83,7 +83,7 @@ export class TaskQueue {
       return null
     }
 
-    // Find first waiting task
+    // 查找第一个等待中的任务
     const taskIndex = queue.findIndex(t => t.status === 'waiting')
     if (taskIndex === -1) {
       return null
@@ -107,7 +107,7 @@ export class TaskQueue {
   }
 
   /**
-   * Mark a task as completed and remove from queue
+   * 标记任务为已完成并从队列中移除
    */
   complete(taskId: string): void {
     for (const [key, queue] of this.queues.entries()) {
@@ -117,18 +117,18 @@ export class TaskQueue {
         task.completedAt = new Date()
         this.runningTasks.delete(key)
 
-        // Remove completed tasks from queue (keep recent history)
+        // 从队列中移除已完成的任务（保留最近的历史记录）
         const now = Date.now()
-        const completedThreshold = 5 * 60 * 1000 // 5 minutes
+        const completedThreshold = 5 * 60 * 1000 // 5 分钟
 
-        // Remove old completed/failed tasks
+        // 移除旧的已完成/失败的任务
         for (let i = queue.length - 1; i >= 0; i--) {
           const t = queue[i]
           if ((t.status === 'completed' || t.status === 'failed') &&
               t.completedAt && (now - t.completedAt.getTime() > completedThreshold)) {
             queue.splice(i, 1)
           } else if (t.status === 'cancelled') {
-            // Remove cancelled tasks immediately
+            // 立即移除已取消的任务
             queue.splice(i, 1)
           }
         }
@@ -139,7 +139,7 @@ export class TaskQueue {
           queueLength: queue.length
         })
 
-        // Update positions for remaining tasks
+        // 更新剩余任务的位置
         this.updatePositions(key)
 
         return
@@ -148,7 +148,7 @@ export class TaskQueue {
   }
 
   /**
-   * Mark a task as failed
+   * 标记任务为失败
    */
   fail(taskId: string, error: string): void {
     for (const [key, queue] of this.queues.entries()) {
@@ -172,7 +172,7 @@ export class TaskQueue {
   }
 
   /**
-   * Cancel a waiting task
+   * 取消等待中的任务
    */
   cancel(taskId: string): boolean {
     for (const [key, queue] of this.queues.entries()) {
@@ -182,7 +182,7 @@ export class TaskQueue {
         if (task.status === 'waiting') {
           task.status = 'cancelled'
 
-          // Remove from queue
+          // 从队列中移除
           queue.splice(index, 1)
 
           this.updatePositions(key)
@@ -194,14 +194,14 @@ export class TaskQueue {
 
           return true
         }
-        return false // Can't cancel running/completed tasks
+        return false // 无法取消运行中/已完成的任务
       }
     }
     return false
   }
 
   /**
-   * Get task by ID
+   * 根据 ID 获取任务
    */
   getTask(taskId: string): QueuedTask | undefined {
     for (const queue of this.queues.values()) {
@@ -214,7 +214,7 @@ export class TaskQueue {
   }
 
   /**
-   * Get all tasks for a bot/project combination
+   * 获取机器人和项目的所有任务
    */
   getTasks(botId: string, projectId: string): QueuedTask[] {
     const key = this.getQueueKey(botId, projectId)
@@ -222,7 +222,7 @@ export class TaskQueue {
   }
 
   /**
-   * Get current statistics for a bot/project
+   * 获取机器人和项目的当前统计信息
    */
   getStats(botId: string, projectId: string): TaskQueueStats {
     const tasks = this.getTasks(botId, projectId)
@@ -235,7 +235,7 @@ export class TaskQueue {
   }
 
   /**
-   * Check if a task is currently running for the bot/project
+   * 检查机器人和项目是否有正在运行的任务
    */
   isRunning(botId: string, projectId: string): boolean {
     const key = this.getQueueKey(botId, projectId)
@@ -243,7 +243,7 @@ export class TaskQueue {
   }
 
   /**
-   * Get the currently running task for bot/project
+   * 获取机器人和项目当前正在运行的任务
    */
   getRunningTask(botId: string, projectId: string): QueuedTask | null {
     const key = this.getQueueKey(botId, projectId)
@@ -257,7 +257,7 @@ export class TaskQueue {
   }
 
   /**
-   * Update position numbers for all waiting tasks
+   * 更新所有等待中任务的位置编号
    */
   private updatePositions(key: string): void {
     const queue = this.queues.get(key)
@@ -272,7 +272,7 @@ export class TaskQueue {
   }
 
   /**
-   * Clear all tasks (for testing or shutdown)
+   * 清空所有任务（用于测试或关闭）
    */
   clear(): void {
     this.queues.clear()
@@ -281,5 +281,5 @@ export class TaskQueue {
   }
 }
 
-// Global task queue instance
+// 全局任务队列实例
 export const taskQueue = new TaskQueue()

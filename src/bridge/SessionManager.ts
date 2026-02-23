@@ -1,7 +1,7 @@
 import type { Session } from '../types/index.js'
 import { logger } from '../utils/logger.js'
 
-const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000 // 24 hours
+const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000 // 24 小时
 
 export class SessionManager {
   private sessions: Map<string, Session> = new Map()
@@ -15,7 +15,7 @@ export class SessionManager {
     return `${botId}:${userId}`
   }
 
-  // User project selection
+  // 用户项目选择
   getUserProject(botId: string, userId: string, defaultProjectId: string): string {
     const key = this.getUserSelectionKey(botId, userId)
     return this.userProjectSelections.get(key) || defaultProjectId
@@ -27,7 +27,7 @@ export class SessionManager {
     logger.info({ msg: 'User project selection updated', botId, userId, projectId })
   }
 
-  // Session management
+  // 会话管理
   getOrCreateSession(
     botId: string,
     userId: string,
@@ -75,7 +75,7 @@ export class SessionManager {
     logger.info({ msg: 'Project sessions cleared', botId, projectId })
   }
 
-  // Cleanup expired sessions
+  // 清理过期会话
   cleanupExpiredSessions(): void {
     const now = Date.now()
     for (const [key, session] of this.sessions.entries()) {
@@ -86,7 +86,7 @@ export class SessionManager {
     }
   }
 
-  // Start cleanup interval
+  // 启动清理定时器
   startCleanupInterval(intervalMs: number = 60 * 60 * 1000): void {
     setInterval(() => {
       this.cleanupExpiredSessions()

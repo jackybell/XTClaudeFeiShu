@@ -1,7 +1,7 @@
 /**
- * An async queue that implements AsyncIterable.
- * Producers call enqueue() to push items, consumers use for-await-of to read.
- * finish() signals no more items will be added.
+ * 实现 AsyncIterable 的异步队列。
+ * 生产者调用 enqueue() 添加项目，消费者使用 for-await-of 读取。
+ * finish() 表示不会再添加更多项目。
  */
 export class AsyncQueue<T> implements AsyncIterable<T> {
   private queue: T[] = [];
