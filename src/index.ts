@@ -5,6 +5,12 @@ import { MessageBridge } from './bridge/MessageBridge.js'
 import { sessionManager } from './bridge/SessionManager.js'
 import { logger } from './utils/logger.js'
 
+// Set UTF-8 encoding for Windows console to fix Chinese character display
+if (process.platform === 'win32') {
+  process.stdout.setEncoding('utf8')
+  process.stderr.setEncoding('utf8')
+}
+
 async function main() {
   try {
     // Load configuration

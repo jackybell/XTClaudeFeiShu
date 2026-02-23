@@ -121,7 +121,7 @@ export class MessageBridge {
         type: 'status' as const,
         content: {
           status: 'thinking' as const,
-          title: `玄瞳开发助手正在思考... [${taskDisplayId}]`,
+          title: `思考中... [${taskDisplayId}]`,
           content: `项目: **${project.name}**\n\n${message.text}`
         }
       }

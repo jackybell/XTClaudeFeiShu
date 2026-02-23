@@ -379,8 +379,7 @@ export class CommandHandler {
 
     try {
       await configManager.addProject(this.bot.id, newProject)
-      // Reload bot configuration
-      this.bot.projects.push(newProject)
+      // Note: configManager already updates the in-memory config, no need to push again
 
       await this.channelSendCard(message.chatId, {
         type: 'status',
@@ -426,11 +425,7 @@ export class CommandHandler {
 
     try {
       await configManager.removeProject(this.bot.id, projectId)
-      // Update local bot projects
-      const index = this.bot.projects.findIndex(p => p.id === projectId)
-      if (index !== -1) {
-        this.bot.projects.splice(index, 1)
-      }
+      // Note: configManager already updates the in-memory config
 
       await this.channelSendCard(message.chatId, {
         type: 'status',

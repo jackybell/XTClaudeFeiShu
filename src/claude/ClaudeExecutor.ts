@@ -239,8 +239,8 @@ export class ClaudeExecutor {
 
     try {
       for await (const message of stream) {
-        logger.debug("收到消息")
         yield message as SDKMessage
+        logger.debug("Receive Messages"+JSON.stringify(message))
       }
     } catch (err: any) {
       if (err.name === 'AbortError' || abortController.signal.aborted) {

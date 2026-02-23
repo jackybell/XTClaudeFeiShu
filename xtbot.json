@@ -1,5 +1,7 @@
 {
-  "adminOpenIds": [],
+  "adminOpenIds": [
+    "ou_a1dd90334775a157a4e9dbd218bb3436"
+  ],
   "bots": [
     {
       "id": "bot-001",
@@ -12,12 +14,38 @@
           "id": "proj-001",
           "name": "H5商城",
           "path": "d:\\code\\xtimageagent",
-          "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash"],
+          "allowedTools": [
+            "Read",
+            "Edit",
+            "Write",
+            "Glob",
+            "Grep",
+            "Bash"
+          ],
           "maxTurns": 100,
           "maxBudgetUsd": 1.5,
           "enableSkills": true,
-          "settingSources": ["user","project"],
+          "settingSources": [
+            "user",
+            "project"
+          ],
           "plugins": []
+        },
+        {
+          "id": "xtaiagent",
+          "name": "玄瞳AI智能体框架",
+          "path": "D:\\code\\xtaiagent",
+          "allowedTools": [
+            "Read",
+            "Edit",
+            "Write",
+            "Glob",
+            "Grep",
+            "Bash"
+          ],
+          "maxTurns": 100,
+          "maxBudgetUsd": 1.5,
+          "enableSkills": false
         }
       ],
       "currentProjectId": "proj-001"

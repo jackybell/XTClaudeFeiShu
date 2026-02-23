@@ -44,10 +44,20 @@ export class FeishuEventHandler {
     }
 
     const messageType = message.message_type
-    const content = JSON.parse(message.content)
 
-    if (messageType === 'text') {
-      return { text: content.text }
+    try {
+      // Log raw content for debugging
+      console.log('Raw content:', message.content)
+      console.log('Content type:', typeof message.content)
+
+      const content = JSON.parse(message.content)
+
+      if (messageType === 'text') {
+        return { text: content.text }
+      }
+    } catch (error) {
+      console.error('Failed to parse message content:', error)
+      console.error('Raw content string:', message.content)
     }
 
     // TODO: Handle image and file types

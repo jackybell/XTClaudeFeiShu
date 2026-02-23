@@ -14,6 +14,9 @@ export class FeishuChannel implements IChannel {
   private wsClient: lark.WSClient
   private eventDispatcher: lark.EventDispatcher
   private messageCallback?: (message: Message) => void | Promise<void>
+  // Event deduplication: track processed event IDs
+  private processedEvents = new Set<string>()
+  private readonly MAX_PROCESSED_EVENTS = 1000
 
   constructor(
     private appId: string,
@@ -49,31 +52,49 @@ export class FeishuChannel implements IChannel {
 
   private async handleEvent(event: any): Promise<void> {
     try {
-      logger.info({ msg: 'Event received', eventKeys: Object.keys(event), event })
+      // Extract event ID for deduplication
+      const eventId = event?.header?.event_id || event?.event_id || JSON.stringify(event)
+
+      // Check if event was already processed
+      if (this.processedEvents.has(eventId)) {
+        logger.warn({ msg: 'Duplicate event detected, skipping', eventId })
+        return
+      }
+
+      // Add to processed events
+      this.processedEvents.add(eventId)
+
+      // Clean up old event IDs to prevent memory leak
+      if (this.processedEvents.size > this.MAX_PROCESSED_EVENTS) {
+        const firstEvent = this.processedEvents.values().next().value
+        this.processedEvents.delete(firstEvent)
+      }
+
+      logger.info({ msg: 'Event received', eventId, eventKeys: Object.keys(event) })
 
       // Check event structure
       const eventType = event?.header?.event_type || event?.event_type
-      logger.info({ msg: 'Event type', eventType })
+      logger.info({ msg: 'Event type', eventType, eventId })
 
       if (eventType !== 'im.message.receive_v1') {
         return
       }
 
       if (!this.eventHandler.verifyAuth(event)) {
-        logger.warn({ msg: 'Auth verification failed' })
+        logger.warn({ msg: 'Auth verification failed', eventId })
         return
       }
 
       const isMentioned = this.eventHandler.isMentioned(event)
-      logger.info({ msg: 'Checking mention', isMentioned, chatType: event.event?.message?.chat_type })
+      logger.info({ msg: 'Checking mention', isMentioned, chatType: event.event?.message?.chat_type, eventId })
 
       if (!isMentioned) {
-        logger.info({ msg: 'Message not mentioned, skipping' })
+        logger.info({ msg: 'Message not mentioned, skipping', eventId })
         return
       }
 
       const message = this.eventHandler.toMessage(event)
-      logger.info({ msg: 'Message processed', chatId: message.chatId, userId: message.userId, text: message.text })
+      logger.info({ msg: 'Message processed', chatId: message.chatId, userId: message.userId, text: message.text, eventId })
 
       if (this.messageCallback) {
         await this.messageCallback(message)
