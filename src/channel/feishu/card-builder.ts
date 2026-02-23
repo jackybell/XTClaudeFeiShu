@@ -128,3 +128,66 @@ function formatDuration(ms: number): string {
   const secs = ((ms % 60000) / 1000).toFixed(0)
   return `${mins}m ${secs}s`
 }
+
+// 确认卡片模板
+export function buildConfirmCard(prompt: string, options: string[] = ['确认', '取消']): any {
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: '请确认' },
+      template: 'yellow'
+    },
+    elements: [{
+      tag: 'div',
+      text: { tag: 'lark_md', content: `**${prompt}**` }
+    }, {
+      tag: 'hr'
+    }, {
+      tag: 'action',
+      actions: options.map(opt => ({
+        tag: 'button',
+        text: { tag: 'plain_text', content: opt },
+        value: opt.toLowerCase()
+      }))
+    }]
+  }
+}
+
+// 选择卡片模板
+export function buildChoiceCard(prompt: string, options: string[]): any {
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: '请选择' },
+      template: 'blue'
+    },
+    elements: [{
+      tag: 'div',
+      text: { tag: 'lark_md', content: `**${prompt}**` }
+    }, {
+      tag: 'hr'
+    }, {
+      tag: 'action',
+      actions: options.map((opt, idx) => ({
+        tag: 'button',
+        text: { tag: 'plain_text', content: opt },
+        value: `option_${idx}`
+      }))
+    }]
+  }
+}
+
+// 输入提示卡片模板
+export function buildInputPromptCard(prompt: string): any {
+  return {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: '需要输入' },
+      template: 'grey'
+    },
+    elements: [{
+      tag: 'div',
+      text: { tag: 'lark_md', content: `**${prompt}**\n\n请直接回复消息` }
+    }]
+  }
+}
