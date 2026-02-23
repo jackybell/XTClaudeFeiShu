@@ -122,7 +122,7 @@ export class MessageBridge {
         type: 'status' as const,
         content: {
           status: 'thinking' as const,
-          title: `玄瞳开发助手正在思考... [${taskDisplayId}]`,
+          title: `正在思考... [${taskDisplayId}]`,
           content: `项目: **${project.name}**\n\n${message.text}`
         }
       }
@@ -162,16 +162,36 @@ export class MessageBridge {
 
       // 处理来自生成器的消息
       for await (const sdkMessage of executionHandle.stream) {
-        if (abortController.signal.aborted) break
+        if (abortController.signal.aborted) {
+          logger.debug(`zhongguanhui :[${taskDisplayId}]被终止`)
+          break
+        }
 
         // 检查用户输入请求
         if (sdkMessage.type === 'user_input_required') {
+          logger.debug(`zhongguanhui :[${taskDisplayId}]需要用户输入`)
           await this.handleUserInputRequest(sessionKey, sdkMessage, message.chatId)
           break // 暂停执行
         }
 
+        // 检查结果消息 - 执行完成
+        if (sdkMessage.type === 'result') {
+          logger.info({ msg: 'Result message received, breaking loop', result_type: sdkMessage.result_type })
+          // 保存 session_id
+          if (sdkMessage.session_id) {
+            sessionManager.getOrCreateSession(
+              this.bot.id,
+              message.userId,
+              project.id,
+              sdkMessage.session_id
+            )
+          }
+          break // 退出循环
+        }
+
         // 处理其他 SDK 消息类型
-        await this.processSDKMessage(sdkMessage, message.chatId, project.id, (text) => {
+        logger.debug(`zhongguanhui :[${taskDisplayId}]其他消息`)
+        await this.processSDKMessage(sdkMessage, message.chatId, project.id, taskDisplayId,(text) => {
           responseText = text
         })
       }
@@ -239,14 +259,14 @@ export class MessageBridge {
     }
   }
 
-  private async updateCard(chatId: string, project: Project, responseText: string): Promise<void> {
+  private async updateCard(chatId: string, project: Project, responseText: string, taskDisplayId: string = ''): Promise<void> {
     // 如果有 cardId 则使用 updateCard，否则发送新卡片
     const duration = this.startTime ? Date.now() - this.startTime : 0
     const card = {
       type: 'status' as const,
       content: {
         status: 'running',
-        title: '执行中...',
+        title: `执行中...(${taskDisplayId})`,
         content: `项目: **${project.name}**\n\n${responseText || '工作中...'}`,
         toolCalls: this.toolCalls,
         duration
@@ -412,10 +432,26 @@ export class MessageBridge {
     try {
       let responseText = ''
       // 继续处理消息流
+      let taskDisplayId = '恢复执行，无法获取taskid'
       for await (const sdkMessage of executionHandle.stream) {
         const currentState = sessionManager.getState(`${session.botId}:${session.userId}`)
         if (this.currentTaskId && currentState?.executionHandle) {
-          await this.processSDKMessage(sdkMessage, currentState.chatId, session.projectId, (text) => {
+          // 检查结果消息 - 执行完成
+          if (sdkMessage.type === 'result') {
+            logger.info({ msg: 'Result message received in resume, breaking loop', result_type: sdkMessage.result_type })
+            // 保存 session_id
+            if (sdkMessage.session_id) {
+              sessionManager.getOrCreateSession(
+                session.botId,
+                session.userId,
+                session.projectId,
+                sdkMessage.session_id
+              )
+            }
+            break // 退出循环
+          }
+
+          await this.processSDKMessage(sdkMessage, currentState.chatId, session.projectId, taskDisplayId,(text) => {
             responseText = text
           })
         }
@@ -438,7 +474,7 @@ export class MessageBridge {
   /**
    * 处理 SDK 消息（提取的通用逻辑）
    */
-  private async processSDKMessage(sdkMessage: any, chatId: string, projectId: string, updateResponseText: (text: string) => void): Promise<void> {
+  private async processSDKMessage(sdkMessage: any, chatId: string, projectId: string, taskDisplayId: string, updateResponseText: (text: string) => void): Promise<void> {
     const project = this.bot.projects.find(p => p.id === projectId)
     if (!project) return
 
@@ -457,14 +493,14 @@ export class MessageBridge {
         const delta = event.delta
         if (delta?.type === 'text_delta' && delta.text) {
           updateResponseText(delta.text)
-          await this.updateCard(chatId, project, delta.text)
+          await this.updateCard(chatId, project, delta.text,taskDisplayId)
         }
       } else if (event?.type === 'content_block_start') {
         const block = event.content_block
         if (block?.type === 'tool_use' && block.name) {
           // 流事件中的 tool_use 可能没有 input，先添加占位
           this.addOrUpdateToolCall(block.name, undefined)
-          await this.updateCard(chatId, project, '')
+          await this.updateCard(chatId, project, '',taskDisplayId)
         }
       }
     } else if (sdkMessage.type === 'assistant') {
@@ -474,29 +510,16 @@ export class MessageBridge {
         for (const block of content) {
           if (block.type === 'text' && block.text) {
             updateResponseText(block.text)
-            await this.updateCard(chatId, project, block.text)
+            await this.updateCard(chatId, project, block.text,taskDisplayId)
           } else if (block.type === 'tool_use' && block.name) {
             // assistant 消息中的 tool_use 通常包含完整的 input
             this.addOrUpdateToolCall(block.name, block.input)
-            await this.updateCard(chatId, project, '')
+            await this.updateCard(chatId, project, '',taskDisplayId)
           }
         }
       }
-    } else if (sdkMessage.type === 'result') {
-      // 执行结果
-      logger.info({ msg: 'Result message received', result_type: sdkMessage.result_type })
-
-      if (sdkMessage.result_type === 'error_during_execution') {
-        logger.error({ msg: 'Execution error', error: sdkMessage.error })
-        throw new Error(`Execution error: ${sdkMessage.error || 'Unknown error'}`)
-      } else if (sdkMessage.result_type === 'error_max_turns') {
-        throw new Error(`Max turns (${sdkMessage.max_turns}) exceeded`)
-      } else if (sdkMessage.result_type === 'error_max_budget_usd') {
-        throw new Error(`Max budget ($${sdkMessage.max_budget_usd}) exceeded`)
-      }
-
-      // 注意：会话保存在 handleExecutionComplete 中处理
     }
+    // 注意: result 消息现在在主循环中处理，不会传递到这里
   }
 
   /**
