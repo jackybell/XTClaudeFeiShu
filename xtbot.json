@@ -1,0 +1,26 @@
+{
+  "adminOpenIds": [],
+  "bots": [
+    {
+      "id": "bot-001",
+      "name": "测试机器人",
+      "channel": "feishu",
+      "feishuAppId": "cli_a9112a25ee38dbd6",
+      "feishuAppSecret": "R4u2ZDhxRDDp5hcDi3rg6bBc0aaFFdtj",
+      "projects": [
+        {
+          "id": "proj-001",
+          "name": "H5商城",
+          "path": "d:\\code\\xtimageagent",
+          "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash"],
+          "maxTurns": 100,
+          "maxBudgetUsd": 1.5,
+          "enableSkills": true,
+          "settingSources": ["user","project"],
+          "plugins": []
+        }
+      ],
+      "currentProjectId": "proj-001"
+    }
+  ]
+}

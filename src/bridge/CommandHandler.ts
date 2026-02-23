@@ -1,6 +1,8 @@
 import type { Command, Message, Bot } from '../types/index.js'
 import { sessionManager } from './SessionManager.js'
 import { configManager } from '../config.js'
+import { taskQueue } from './TaskQueue.js'
+import type { MessageBridge } from './MessageBridge.js'
 import { logger } from '../utils/logger.js'
 import fs from 'fs/promises'
 
@@ -8,7 +10,8 @@ export class CommandHandler {
   constructor(
     private bot: Bot,
     private channelSendText: (chatId: string, text: string) => Promise<void>,
-    private channelSendCard: (chatId: string, card: any) => Promise<void>
+    private channelSendCard: (chatId: string, card: any) => Promise<string>,
+    private messageBridge?: MessageBridge
   ) {}
 
   parseCommand(text: string): Command | null {
@@ -39,7 +42,7 @@ export class CommandHandler {
       args.splice(clearIndex, 1)
     }
 
-    const validCommands = ['switch', 'reset', 'stop', 'help', 'skills', 'projects']
+    const validCommands = ['switch', 'reset', 'stop', 'status', 'help', 'skills', 'projects']
     if (!validCommands.includes(command)) {
       return null
     }
@@ -65,6 +68,9 @@ export class CommandHandler {
       case 'stop':
         await this.handleStop(message)
         break
+      case 'status':
+        await this.handleStatus(message)
+        break
       case 'help':
         await this.handleHelp(message)
         break
@@ -85,8 +91,9 @@ export class CommandHandler {
     if (!projectName) {
       const projects = this.bot.projects.map(p => `- ${p.name}`).join('\n')
       await this.channelSendCard(message.chatId, {
-        type: 'text',
+        type: 'status',
         content: {
+          status: 'success',
           title: '可用项目',
           content: `当前: **${this.getCurrentProjectName()}**\n\n可用项目:\n${projects}\n\n用法: \`/switch <项目名> [--clear]\``
         }
@@ -110,8 +117,9 @@ export class CommandHandler {
     }
 
     await this.channelSendCard(message.chatId, {
-      type: 'text',
+      type: 'status',
       content: {
+        status: 'success',
         title: '项目已切换',
         content: `已切换到 **${project.name}**\n路径: \`${project.path}\`\n\n${command.options.clear ? '已清除之前的会话。' : '保留了之前的会话。'}`
       }
@@ -124,17 +132,107 @@ export class CommandHandler {
   }
 
   private async handleStop(message: Message): Promise<void> {
-    // TODO: Implement stopping running tasks
-    await this.channelSendText(message.chatId, '停止功能即将推出。')
+    // Get user's selected project
+    const projectId = sessionManager.getUserProject(
+      this.bot.id,
+      message.userId,
+      this.bot.currentProjectId
+    )
+    if (!projectId) {
+      await this.channelSendText(message.chatId, '未找到项目。')
+      return
+    }
+
+    // Check if user has any waiting tasks in the queue
+    const tasks = taskQueue.getTasks(this.bot.id, projectId)
+    const myWaitingTasks = tasks.filter(t =>
+      t.message.userId === message.userId && t.status === 'waiting'
+    )
+
+    if (myWaitingTasks.length === 0) {
+      await this.channelSendText(message.chatId, '你没有等待中的任务。')
+      return
+    }
+
+    // Cancel all waiting tasks for this user
+    let cancelledCount = 0
+    for (const task of myWaitingTasks) {
+      if (taskQueue.cancel(task.id)) {
+        cancelledCount++
+      }
+    }
+
+    await this.channelSendText(message.chatId,
+      `已取消 ${cancelledCount} 个等待中的任务。`
+    )
+  }
+
+  private async handleStatus(message: Message): Promise<void> {
+    if (!this.messageBridge) {
+      await this.channelSendText(message.chatId, '状态查询功能不可用。')
+      return
+    }
+
+    const queueInfo = this.messageBridge.getQueueStatus(message)
+    if (!queueInfo) {
+      await this.channelSendText(message.chatId, '未找到项目。')
+      return
+    }
+
+    const { stats, tasks } = queueInfo
+
+    // Build status message
+    const runningTask = tasks.find(t => t.status === 'running')
+    const myWaitingTasks = tasks.filter(t => t.isMine && t.status === 'waiting')
+    const otherWaitingTasks = tasks.filter(t => !t.isMine && t.status === 'waiting')
+
+    let content = `**队列状态**\n\n`
+    content += `🔄 运行中: ${stats.running}\n`
+    content += `⏳ 等待中: ${stats.waiting}\n`
+    content += `✅ 已完成: ${stats.completed}\n`
+    content += `❌ 失败: ${stats.failed}\n\n`
+
+    if (runningTask) {
+      content += `**当前运行中的任务**\n`
+      content += `- ID: ${runningTask.id.slice(0, 8)}...\n`
+      content += `- 状态: 运行中\n`
+      content += `- 你的任务: ${runningTask.isMine ? '是' : '否'}\n\n`
+    }
+
+    if (myWaitingTasks.length > 0) {
+      content += `**你的等待任务**\n`
+      for (const task of myWaitingTasks) {
+        content += `- 第 ${task.position! + 1} 位 (ID: ${task.id.slice(0, 8)}...)\n`
+      }
+      content += '\n'
+    }
+
+    if (otherWaitingTasks.length > 0) {
+      content += `**其他人等待中的任务**: ${otherWaitingTasks.length} 个\n`
+    }
+
+    if (stats.waiting === 0 && stats.running === 0) {
+      content += '\n当前没有任务在队列中。'
+    }
+
+    await this.channelSendCard(message.chatId, {
+      type: 'status',
+      content: {
+        status: 'success',
+        title: '任务队列状态',
+        content
+      }
+    })
   }
 
   private async handleHelp(message: Message): Promise<void> {
     const projects = this.bot.projects.map(p => `- ${p.name}`).join('\n')
     await this.channelSendCard(message.chatId, {
-      type: 'text',
+      type: 'status',
       content: {
+        status: 'success',
         title: '可用命令',
-        content: `**/switch <项目> [--clear]** - 切换项目\n**/reset** - 重置当前会话\n**/stop** - 停止当前任务\n**/skills** - 查看可用技能\n**/projects [list|add|remove]** - 管理项目\n**/help** - 显示此帮助\n\n可用项目:\n${projects}`
+        content: `**/switch <项目> [--clear]** - 切换项目\n**/reset** - 重置当前会话\n**/stop** - 取消等待中的任务\n**/status** - 查看任务队列状态\n**/skills** - 查看可用技能\n**/projects [list|add|remove]** - 管理项目\n**/help** - 显示此帮助\n\n可用项目:\n${projects}`
       }
     })
   }
@@ -154,8 +252,9 @@ export class CommandHandler {
 
     if (!project.enableSkills) {
       await this.channelSendCard(message.chatId, {
-        type: 'text',
+        type: 'status',
         content: {
+          status: 'success',
           title: '未启用技能',
           content: `项目 **${project.name}** 未启用技能。\n\n要启用技能，请在项目配置中设置 \`enableSkills: true\`。`
         }
@@ -171,8 +270,9 @@ export class CommandHandler {
     ].join('\n')
 
     await this.channelSendCard(message.chatId, {
-      type: 'text',
+      type: 'status',
       content: {
+        status: 'success',
         title: '技能配置',
         content: skillInfo
       }
@@ -184,8 +284,9 @@ export class CommandHandler {
 
     if (!subCommand) {
       await this.channelSendCard(message.chatId, {
-        type: 'text',
+        type: 'status',
         content: {
+          status: 'success',
           title: '项目管理命令',
           content: `**/projects list** - 列出所有项目\n**/projects add <id> <name> <path>** - 添加新项目（仅管理员）\n**/projects remove <id>** - 删除项目（仅管理员）\n\n用法:\n\`/projects add proj-003 "我的项目" /path/to/project\``
         }
@@ -219,8 +320,9 @@ export class CommandHandler {
     }).join('\n\n')
 
     await this.channelSendCard(message.chatId, {
-      type: 'text',
+      type: 'status',
       content: {
+        status: 'success',
         title: `项目列表 (${this.bot.projects.length})`,
         content: projectsList || '未配置项目。'
       }
@@ -237,8 +339,9 @@ export class CommandHandler {
     const args = command.args.slice(1) // Remove 'add' subcommand
     if (args.length < 3) {
       await this.channelSendCard(message.chatId, {
-        type: 'text',
+        type: 'status',
         content: {
+          status: 'error',
           title: '用法',
           content: `**/projects add <id> <name> <path>**\n\n示例:\n\`/projects add proj-003 "我的项目" /home/user/project\`\n\n注意: 路径必须是绝对路径。`
         }
@@ -280,8 +383,9 @@ export class CommandHandler {
       this.bot.projects.push(newProject)
 
       await this.channelSendCard(message.chatId, {
-        type: 'text',
+        type: 'status',
         content: {
+          status: 'success',
           title: '✓ 项目已添加',
           content: `成功添加项目:\n\n**${newProject.name}** (\`${newProject.id}\`)\n路径: \`${newProject.path}\`\n\n现在可以使用以下命令切换:\n\`/switch ${newProject.name}\``
         }
@@ -302,8 +406,9 @@ export class CommandHandler {
     const args = command.args.slice(1) // Remove 'remove' subcommand
     if (args.length < 1) {
       await this.channelSendCard(message.chatId, {
-        type: 'text',
+        type: 'status',
         content: {
+          status: 'success',
           title: '用法',
           content: `**/projects remove <project-id>**\n\n示例:\n\`/projects remove proj-003\`\n\n注意: 使用项目 ID，而不是名称。`
         }
@@ -328,8 +433,9 @@ export class CommandHandler {
       }
 
       await this.channelSendCard(message.chatId, {
-        type: 'text',
+        type: 'status',
         content: {
+          status: 'success',
           title: '✓ 项目已删除',
           content: `成功删除项目:\n\n**${project.name}** (\`${project.id}\`)\n路径: \`${project.path}\``
         }

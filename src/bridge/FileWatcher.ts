@@ -20,7 +20,7 @@ export class FileWatcher {
   start(): void {
     this.watcher = chokidar.watch(this.workDir, {
       ignoreInitial: true,
-      ignored: /node_modules|\.git|dist|\.claude|outputs/,
+      ignored: /node_modules|\.git|dist|\.claude|outputs|^.*tmpclaude.*$/,
       awaitWriteFinish: {
         stabilityThreshold: 500,
         pollInterval: 100
@@ -36,6 +36,13 @@ export class FileWatcher {
   }
 
   private async handleFileChange(type: 'add' | 'change', path: string): Promise<void> {
+    // Ignore temporary files (tmpclaude* directories/files)
+    const fileName = path.split(/[/\\]/).pop() || path
+    if (fileName.startsWith('tmpclaude')) {
+      logger.debug({ msg: 'Ignoring temp file', path })
+      return
+    }
+
     const now = Date.now()
     const lastSent = this.fileSentTimestamps.get(path)
 

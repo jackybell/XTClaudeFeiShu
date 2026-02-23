@@ -1,137 +1,253 @@
-import { query } from '@anthropic-ai/claude-agent-sdk'
-import type { SDKPartialAssistantMessage } from '@anthropic-ai/claude-agent-sdk'
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { logger } from '../utils/logger.js'
+import { AsyncQueue } from '../utils/async-queue.js'
+import path from 'node:path'
+import os from 'node:os'
+import type { Project } from '../types/index.js'
 
-export interface ClaudeOptions {
-  query: string
-  images?: string[]
+export interface ExecutorOptions {
+  prompt: string
+  cwd: string
   sessionId?: string
-  workingDirectory: string
+  abortController: AbortController
   allowedTools: string[]
   maxTurns?: number
   maxBudgetUsd?: number
+  outputsDir?: string
   enableSkills?: boolean
   settingSources?: ('project' | 'local' | 'user')[]
   plugins?: Array<{ type: 'local'; path: string }>
-  onSkillDiscovered?: (skills: string[]) => void
 }
 
-export interface StreamChunk {
-  type: 'content' | 'tool_use' | 'tool_result' | 'end' | 'system'
-  content?: string
-  toolName?: string
-  toolInput?: string
-  sessionId?: string
-  skills?: string[]
+export type SDKMessage = {
+  type: string
+  subtype?: string
+  uuid?: string
+  session_id?: string
+  message?: {
+    content?: Array<{
+      type: string
+      text?: string
+      name?: string
+      id?: string
+      input?: unknown
+    }>
+  }
+  // Result fields
+  duration_ms?: number
+  duration_api_ms?: number
+  total_cost_usd?: number
+  result?: string
+  is_error?: boolean
+  num_turns?: number
+  errors?: string[]
+  result_type?: string
+  error?: string
+  max_turns?: number
+  max_budget_usd?: number
+  // Stream event fields
+  event?: {
+    type: string
+    index?: number
+    delta?: {
+      type: string
+      text?: string
+    }
+    content_block?: {
+      type: string
+      text?: string
+      name?: string
+      id?: string
+      input?: unknown
+    }
+  }
+  parent_tool_use_id?: string | null
+}
+
+export interface ExecutionHandle {
+  stream: AsyncGenerator<SDKMessage>
+  sendAnswer(toolUseId: string, sessionId: string, answerText: string): void
+  finish(): void
 }
 
 export class ClaudeExecutor {
-  private runningTasks: Map<string, AbortController> = new Map()
+  private buildQueryOptions(options: ExecutorOptions): Record<string, unknown> {
+    // Pass environment variables to child process (for ANTHROPIC_AUTH_TOKEN, etc.)
+    // const env: Record<string, string> = {
+    //   ...process.env,
+    //   // Ensure critical environment variables are passed
+    // }
+    const queryOptions: Record<string, unknown> = {
+      allowedTools: options.allowedTools,
+      permissionMode: 'bypassPermissions' as const,
+      allowDangerouslySkipPermissions: true,
+      cwd: options.cwd,
+      abortController: options.abortController,
+      includePartialMessages: true,
+      extraArgs: { verbose: null },  // Required for includePartialMessages to work
+      // Load MCP servers and settings from user/project config files
+      settingSources: ['user', 'project'],
+    }
 
-  async execute(options: ClaudeOptions, onChunk: (chunk: StreamChunk) => void): Promise<void> {
-    const taskId = Math.random().toString(36).substring(7)
-    const abortController = new AbortController()
-    this.runningTasks.set(taskId, abortController)
+    // Configure Claude executable path based on platform
+    const claudeExecutablePath = process.env.CLAUDE_EXECUTABLE_PATH
+    const isWindows = os.platform() === 'win32'
 
-    try {
-      const queryOptions: Record<string, unknown> = {
-        abortController,
-        sessionId: options.sessionId,
-        permissionMode: 'bypassPermissions',
-        allowDangerouslySkipPermissions: true,
-        cwd: options.workingDirectory,
-        allowedTools: options.allowedTools,
-        maxTurns: options.maxTurns || 100,
-        maxBudgetUsd: options.maxBudgetUsd || 1.5,
-        includePartialMessages: true
+    if (claudeExecutablePath) {
+      if (isWindows && claudeExecutablePath.endsWith('.cmd')) {
+        // On Windows, .cmd files cannot be spawned directly
+        // Use node executable with cli.js as argument
+        const cmdDir = path.dirname(claudeExecutablePath)
+        const cliJsPath = path.join(cmdDir, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js')
+        queryOptions.executable = 'node' as const
+        queryOptions.executableArgs = [cliJsPath]
+        logger.info({ msg: 'Using Claude Code executable (Windows)', cliJsPath })
+      } else {
+        // On Unix/Linux/macOS, use the executable path directly
+        queryOptions.pathToClaudeCodeExecutable = claudeExecutablePath
+        logger.info({ msg: 'Using Claude Code executable', path: claudeExecutablePath })
       }
+    } else {
+      logger.info({ msg: 'Using default Claude API (ANTHROPIC_API_KEY from env)' })
+    }
 
-      // Enable skills support if requested
-      if (options.enableSkills) {
-        queryOptions.settingSources = options.settingSources || ['project', 'local']
-        queryOptions.plugins = options.plugins || []
-        logger.info({
-          msg: 'Skills enabled',
-          settingSources: queryOptions.settingSources,
-          plugins: queryOptions.plugins
-        })
+    // Build system prompt appendix from sections
+    const appendSections: string[] = []
+
+    if (options.outputsDir) {
+      appendSections.push(`## Output Files\nWhen producing output files for the user (images, PDFs, documents, archives, code files, etc.), copy them to: ${options.outputsDir}\nUse \`cp\` via the Bash tool. The bridge will automatically send files placed there to the user in Feishu.`)
+    }
+
+    if (appendSections.length > 0) {
+      queryOptions.systemPrompt = {
+        type: 'preset',
+        preset: 'claude_code',
+        append: '\n\n' + appendSections.join('\n\n'),
       }
+    }
 
-      const queryIterator = query({
-        prompt: options.query,
-        options: queryOptions
+    if (options.maxTurns !== undefined) {
+      queryOptions.maxTurns = options.maxTurns
+    }
+
+    if (options.maxBudgetUsd !== undefined) {
+      queryOptions.maxBudgetUsd = options.maxBudgetUsd
+    }
+
+    if (options.sessionId) {
+      queryOptions.resume = options.sessionId
+    }
+
+    // Enable skills support if requested
+    if (options.enableSkills) {
+      queryOptions.settingSources = options.settingSources || ['user','project']
+      queryOptions.plugins = options.plugins || []
+      logger.info({
+        msg: 'Skills enabled',
+        settingSources: queryOptions.settingSources,
+        plugins: queryOptions.plugins
       })
+    }
 
-      for await (const message of queryIterator) {
-        if (abortController.signal.aborted) break
+    return queryOptions
+  }
 
-        // Handle system messages (for skill discovery)
-        if (message.type === 'system') {
-          const systemMsg = message as { subtype?: string; skills?: string[]; slash_commands?: string[] }
-          if (systemMsg.subtype === 'init' || systemMsg.subtype === 'config_change') {
-            const skills = systemMsg.skills || systemMsg.slash_commands || []
-            if (skills.length > 0) {
-              logger.info({ msg: 'Skills discovered', skills })
-              onChunk({ type: 'system', skills })
-              if (options.onSkillDiscovered) {
-                options.onSkillDiscovered(skills)
-              }
-            }
-          }
-        } else if (message.type === 'stream_event') {
-          const partialMsg = message as SDKPartialAssistantMessage
-          if (partialMsg.event.type === 'content_block_delta') {
-            const delta = partialMsg.event.delta
-            if (delta.type === 'text_delta') {
-              onChunk({ type: 'content', content: delta.text })
-            }
-          } else if (partialMsg.event.type === 'content_block_start') {
-            const block = partialMsg.event.contentBlock
-            if (block?.type === 'tool_use') {
-              onChunk({
-                type: 'tool_use',
-                toolName: block.name,
-                toolInput: JSON.stringify(block.input)
-              })
-            }
-          }
-        } else if (message.type === 'assistant') {
-          // Full assistant message received
-          const assistantMsg = message
-          if (assistantMsg.message.content) {
-            for (const block of assistantMsg.message.content) {
-              if (block.type === 'text') {
-                onChunk({ type: 'content', content: block.text })
-              } else if (block.type === 'tool_use') {
-                onChunk({
-                  type: 'tool_use',
-                  toolName: block.name,
-                  toolInput: JSON.stringify(block.input)
-                })
-              }
-            }
-          }
-        } else if (message.type === 'result') {
-          if (message.result_type === 'error_during_execution') {
-            throw new Error(`Execution error: ${message.error || 'Unknown error'}`)
-          } else if (message.result_type === 'error_max_turns') {
-            throw new Error(`Max turns (${message.max_turns}) exceeded`)
-          } else if (message.result_type === 'error_max_budget_usd') {
-            throw new Error(`Max budget ($${message.max_budget_usd}) exceeded`)
-          }
-          onChunk({ type: 'end', sessionId: message.session_id })
+  /**
+   * Start a multi-turn execution session that allows sending tool results back to Claude
+   */
+  startExecution(options: ExecutorOptions): ExecutionHandle {
+    const { prompt, cwd, sessionId, abortController } = options
+
+    logger.info({ cwd, hasSession: !!sessionId }, 'Starting Claude execution (multi-turn)')
+
+    const inputQueue = new AsyncQueue<SDKUserMessage>()
+
+    // Push the initial user message
+    const initialMessage: SDKUserMessage = {
+      type: 'user',
+      message: {
+        role: 'user' as const,
+        content: prompt,
+      },
+      parent_tool_use_id: null,
+      session_id: sessionId || '',
+    }
+    inputQueue.enqueue(initialMessage)
+
+    const queryOptions = this.buildQueryOptions(options)
+
+    const stream = query({
+      prompt: inputQueue,
+      options: queryOptions as any,
+    })
+
+    async function* wrapStream(): AsyncGenerator<SDKMessage> {
+      try {
+        for await (const message of stream) {
+          yield message as SDKMessage
         }
+      } catch (err: any) {
+        if (err.name === 'AbortError' || abortController.signal.aborted) {
+          logger.info('Claude execution aborted')
+          return
+        }
+        throw err
       }
-    } finally {
-      this.runningTasks.delete(taskId)
+    }
+
+    return {
+      stream: wrapStream(),
+      sendAnswer: (toolUseId: string, sid: string, answerText: string) => {
+        logger.info({ toolUseId }, 'Sending answer to Claude')
+        const answerMessage: SDKUserMessage = {
+          type: 'user',
+          message: {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: toolUseId,
+                content: answerText,
+              },
+            ],
+          },
+          parent_tool_use_id: null,
+          session_id: sid,
+        }
+        inputQueue.enqueue(answerMessage)
+      },
+      finish: () => {
+        inputQueue.finish()
+      },
     }
   }
 
-  abort(): void {
-    for (const controller of this.runningTasks.values()) {
-      controller.abort()
+  /**
+   * Simple one-shot execution (returns async generator of messages)
+   */
+  async *execute(options: ExecutorOptions): AsyncGenerator<SDKMessage> {
+    const { prompt, cwd, sessionId, abortController } = options
+
+    logger.info({ cwd, hasSession: !!sessionId }, 'Starting Claude execution')
+
+    const queryOptions = this.buildQueryOptions(options)
+    logger.debug(queryOptions);
+    const stream = query({
+      prompt,
+      options: queryOptions as any,
+    })
+
+    try {
+      for await (const message of stream) {
+        logger.debug("收到消息")
+        yield message as SDKMessage
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError' || abortController.signal.aborted) {
+        logger.info('Claude execution aborted')
+        return
+      }
+      throw err
     }
-    this.runningTasks.clear()
-    logger.info({ msg: 'All tasks aborted' })
   }
 }

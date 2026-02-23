@@ -8,19 +8,25 @@ export class FeishuEventHandler {
     this.botId = botId
   }
 
-  verifyAuth(_event: FeishuEvent): boolean {
+  verifyAuth(_event: any): boolean {
     // Feishu already verifies via signature
     return true
   }
 
-  isMentioned(event: FeishuEvent): boolean {
-    const chatType = event.event.message.chat_type
+  isMentioned(event: any): boolean {
+    // Handle actual SDK event structure (event.message, not event.event.message)
+    const message = event.message || event.event?.message
+    if (!message) {
+      return false
+    }
+
+    const chatType = message.chat_type
     if (chatType !== 'group') {
       return true // Private chat always counts as mentioned
     }
 
     // Check if bot is mentioned in group
-    const mention = event.event.message.mention
+    const mention = message.mentions
     if (!mention) {
       return false
     }
@@ -30,9 +36,15 @@ export class FeishuEventHandler {
     )
   }
 
-  extractMessageContent(event: FeishuEvent): { text: string; images?: string[] } {
-    const messageType = event.event.message.message_type
-    const content = JSON.parse(event.event.message.content)
+  extractMessageContent(event: any): { text: string; images?: string[] } {
+    // Handle actual SDK event structure
+    const message = event.message || event.event?.message
+    if (!message) {
+      return { text: '[Invalid message]' }
+    }
+
+    const messageType = message.message_type
+    const content = JSON.parse(message.content)
 
     if (messageType === 'text') {
       return { text: content.text }
@@ -47,9 +59,15 @@ export class FeishuEventHandler {
     return text.replace(/@_AT_[^_]+_/g, '').trim()
   }
 
-  toMessage(event: FeishuEvent): Message {
-    const sender = event.event.sender
-    const message = event.event.message
+  toMessage(event: any): Message {
+    // Handle actual SDK event structure
+    const message = event.message || event.event?.message
+    const sender = event.sender || event.event?.sender
+
+    if (!message || !sender) {
+      throw new Error('Invalid event structure: missing message or sender')
+    }
+
     const { text, images } = this.extractMessageContent(event)
 
     return {

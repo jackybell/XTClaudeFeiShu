@@ -10,14 +10,21 @@ export interface CardConfig {
 
 export function buildCard(config: CardConfig): any {
   const card: any = {
-    header: config.title ? {
+    config: {
+      wide_screen_mode: true
+    },
+    elements: []
+  }
+
+  // Header with title
+  if (config.title) {
+    card.header = {
       title: {
         tag: 'plain_text',
         content: config.title
       },
       template: config.status || 'blue'
-    } : undefined,
-    elements: []
+    }
   }
 
   // Status indicator
@@ -28,8 +35,17 @@ export function buildCard(config: CardConfig): any {
       success: 'green',
       error: 'red'
     }
-    card.header = card.header || {}
-    card.header.template = statusColors[config.status]
+    if (!card.header) {
+      card.header = {
+        title: {
+          tag: 'plain_text',
+          content: '状态'
+        },
+        template: statusColors[config.status]
+      }
+    } else {
+      card.header.template = statusColors[config.status]
+    }
   }
 
   // Content
@@ -96,7 +112,7 @@ export function buildCard(config: CardConfig): any {
     })
   }
 
-  return { config: card }
+  return card
 }
 
 function formatSize(bytes: number): string {

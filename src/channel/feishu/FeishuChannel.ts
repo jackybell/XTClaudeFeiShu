@@ -2,7 +2,6 @@ import * as lark from '@larksuiteoapi/node-sdk'
 import { createReadStream } from 'fs'
 import type { IChannel } from '../IChannel.interface.js'
 import type { Message, Card } from '../../types/index.js'
-import type { FeishuEvent } from '../types.js'
 import { FeishuEventHandler } from './event-handler.js'
 import { buildCard } from './card-builder.js'
 import { logger } from '../../utils/logger.js'
@@ -48,9 +47,15 @@ export class FeishuChannel implements IChannel {
     logger.info({ msg: 'Feishu channel initialized', appId: this.appId })
   }
 
-  private async handleEvent(event: FeishuEvent): Promise<void> {
+  private async handleEvent(event: any): Promise<void> {
     try {
-      if (event.header.event_type !== 'im.message.receive_v1') {
+      logger.info({ msg: 'Event received', eventKeys: Object.keys(event), event })
+
+      // Check event structure
+      const eventType = event?.header?.event_type || event?.event_type
+      logger.info({ msg: 'Event type', eventType })
+
+      if (eventType !== 'im.message.receive_v1') {
         return
       }
 
@@ -59,16 +64,22 @@ export class FeishuChannel implements IChannel {
         return
       }
 
-      if (!this.eventHandler.isMentioned(event)) {
+      const isMentioned = this.eventHandler.isMentioned(event)
+      logger.info({ msg: 'Checking mention', isMentioned, chatType: event.event?.message?.chat_type })
+
+      if (!isMentioned) {
+        logger.info({ msg: 'Message not mentioned, skipping' })
         return
       }
 
       const message = this.eventHandler.toMessage(event)
+      logger.info({ msg: 'Message processed', chatId: message.chatId, userId: message.userId, text: message.text })
+
       if (this.messageCallback) {
         await this.messageCallback(message)
       }
-    } catch (error) {
-      logger.error({ msg: 'Error handling event', error })
+    } catch (error: any) {
+      logger.error({ msg: 'Error handling event', error: error?.message || error?.toString(), stack: error?.stack })
     }
   }
 
@@ -89,9 +100,9 @@ export class FeishuChannel implements IChannel {
     })
   }
 
-  async sendCard(chatId: string, card: Card): Promise<void> {
+  async sendCard(chatId: string, card: Card): Promise<string> {
     const cardConfig = this.toCardConfig(card)
-    await this.client.im.message.create({
+    const result = await this.client.im.message.create({
       params: {
         receive_id_type: 'chat_id'
       },
@@ -101,18 +112,34 @@ export class FeishuChannel implements IChannel {
         content: JSON.stringify(cardConfig)
       }
     })
+    // Return message ID for later updates
+    const messageId = result?.data?.message_id || result?.message_id || ''
+    logger.info({ msg: 'Card sent', cardId: messageId, cardType: card.type, hasMessageId: !!messageId })
+    return messageId
   }
 
   async updateCard(_chatId: string, cardId: string, card: Card): Promise<void> {
     const cardConfig = this.toCardConfig(card)
-    await this.client.im.message.patch({
-      path: {
-        message_id: cardId
-      },
-      data: {
-        content: JSON.stringify(cardConfig)
+    logger.info({ msg: 'Updating card', cardId, cardType: card.type })
+    try {
+      await this.client.im.message.patch({
+        path: {
+          message_id: cardId
+        },
+        data: {
+          content: JSON.stringify(cardConfig)
+        }
+      })
+      logger.info({ msg: 'Card updated', cardId })
+    } catch (error: any) {
+      // Handle Feishu rate limit error gracefully
+      if (error?.response?.data?.code === 230020) {
+        logger.warn({ msg: 'Rate limit hit, skipping card update', cardId })
+        return
       }
-    })
+      // Re-throw other errors
+      throw error
+    }
   }
 
   async sendFile(chatId: string, filePath: string): Promise<void> {
@@ -185,9 +212,17 @@ export class FeishuChannel implements IChannel {
 
   private toCardConfig(card: Card): any {
     if (card.type === 'text') {
+      // Return card config in correct Feishu format
       return {
         config: {
           wide_screen_mode: true
+        },
+        header: {
+          title: {
+            tag: 'plain_text',
+            content: '消息'
+          },
+          template: 'grey'
         },
         elements: [
           {

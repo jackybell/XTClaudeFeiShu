@@ -13,8 +13,8 @@ export interface IChannel {
   // Send text message
   sendText(chatId: string, text: string): Promise<void>
 
-  // Send card message
-  sendCard(chatId: string, card: Card): Promise<void>
+  // Send card message, returns card/message ID
+  sendCard(chatId: string, card: Card): Promise<string>
 
   // Update existing card
   updateCard(chatId: string, cardId: string, card: Card): Promise<void>
