@@ -1,9 +1,9 @@
 import type { IChannel } from '../channel/IChannel.interface.js'
-import type { Message, Bot, Project, Session } from '../types/index.js'
+import type { Message, Bot, Project, Session, SessionStatus } from '../types/index.js'
 import { sessionManager } from './SessionManager.js'
 import { CommandHandler } from './CommandHandler.js'
 import { FileWatcher, type FileChangeEvent } from './FileWatcher.js'
-import { ClaudeExecutor, type SDKMessage } from '../claude/ClaudeExecutor.js'
+import { ClaudeExecutor } from '../claude/ClaudeExecutor.js'
 import { taskQueue, type QueuedTask } from './TaskQueue.js'
 import { logger } from '../utils/logger.js'
 import { buildConfirmCard, buildChoiceCard, buildInputPromptCard } from '../channel/feishu/card-builder.js'
@@ -153,7 +153,7 @@ export class MessageBridge {
       // 保存执行句柄到会话状态
       const sessionKey = `${this.bot.id}:${message.userId}`
       sessionManager.setState(sessionKey, {
-        status: 'executing',
+        status: 'executing' as SessionStatus,
         currentTaskId: task.id,
         executionHandle,
         chatId: message.chatId,
@@ -362,22 +362,22 @@ export class MessageBridge {
 
     if (inputType === 'confirmation') {
       card = {
-        type: 'status',
+        type: 'status' as const,
         content: buildConfirmCard(prompt, options)
       }
-      sessionManager.setStatus(sessionKey, 'waiting_confirm')
+      sessionManager.setStatus(sessionKey, 'waiting_confirm' as SessionStatus)
     } else if (inputType === 'choice') {
       card = {
-        type: 'status',
+        type: 'status' as const,
         content: buildChoiceCard(prompt, options)
       }
-      sessionManager.setStatus(sessionKey, 'waiting_confirm')
+      sessionManager.setStatus(sessionKey, 'waiting_confirm' as SessionStatus)
     } else {
       card = {
-        type: 'status',
+        type: 'status' as const,
         content: buildInputPromptCard(prompt)
       }
-      sessionManager.setStatus(sessionKey, 'waiting_input')
+      sessionManager.setStatus(sessionKey, 'waiting_input' as SessionStatus)
     }
 
     // 更新状态，包含请求信息和超时
@@ -504,7 +504,7 @@ export class MessageBridge {
     sessionKey: string,
     task: QueuedTask | null,
     chatId: string,
-    userId: string,
+    _userId: string,
     projectId: string,
     responseText: string
   ): Promise<void> {
