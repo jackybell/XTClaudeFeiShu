@@ -67,6 +67,7 @@ export type SDKMessage = {
 export interface ExecutionHandle {
   stream: AsyncGenerator<SDKMessage>
   sendAnswer(toolUseId: string, sessionId: string, answerText: string): void
+  sendMessage(text: string): void
   finish(): void
 }
 
@@ -215,6 +216,19 @@ export class ClaudeExecutor {
           session_id: sid,
         }
         inputQueue.enqueue(answerMessage)
+      },
+      sendMessage: (text: string) => {
+        logger.info({ msg: 'Sending user message to SDK', text })
+        const userMessage: SDKUserMessage = {
+          type: 'user',
+          message: {
+            role: 'user' as const,
+            content: text,
+          },
+          parent_tool_use_id: null,
+          session_id: sessionId || '',
+        }
+        inputQueue.enqueue(userMessage)
       },
       finish: () => {
         inputQueue.finish()
