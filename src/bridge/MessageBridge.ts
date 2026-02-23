@@ -6,7 +6,7 @@ import { FileWatcher, type FileChangeEvent } from './FileWatcher.js'
 import { ClaudeExecutor } from '../claude/ClaudeExecutor.js'
 import { taskQueue, type QueuedTask } from './TaskQueue.js'
 import { logger } from '../utils/logger.js'
-import { buildConfirmCard, buildChoiceCard, buildInputPromptCard } from '../channel/feishu/card-builder.js'
+import { buildConfirmCard, buildChoiceCard, buildInputPromptCard, formatToolDetail, type ToolCall } from '../channel/feishu/card-builder.js'
 import fs from 'fs/promises'
 import path from 'path'
 
@@ -15,7 +15,7 @@ export class MessageBridge {
   private claudeExecutor: ClaudeExecutor
   private fileWatcher?: FileWatcher
   private outputFiles: Array<{ name: string; path: string; size: number }> = []
-  private toolCalls: Array<{ name: string; status: string }> = []
+  private toolCalls: ToolCall[] = []
   private startTime?: number
   private currentCardId: string = ''
   private lastUpdateTime: number = 0
@@ -461,8 +461,9 @@ export class MessageBridge {
         }
       } else if (event?.type === 'content_block_start') {
         const block = event.content_block
-        if (block?.type === 'tool_use') {
-          this.toolCalls.push({ name: block.name || 'unknown', status: 'running' })
+        if (block?.type === 'tool_use' && block.name) {
+          // 流事件中的 tool_use 可能没有 input，先添加占位
+          this.addOrUpdateToolCall(block.name, undefined)
           await this.updateCard(chatId, project, '')
         }
       }
@@ -474,8 +475,9 @@ export class MessageBridge {
           if (block.type === 'text' && block.text) {
             updateResponseText(block.text)
             await this.updateCard(chatId, project, block.text)
-          } else if (block.type === 'tool_use') {
-            this.toolCalls.push({ name: block.name || 'unknown', status: 'running' })
+          } else if (block.type === 'tool_use' && block.name) {
+            // assistant 消息中的 tool_use 通常包含完整的 input
+            this.addOrUpdateToolCall(block.name, block.input)
             await this.updateCard(chatId, project, '')
           }
         }
@@ -598,5 +600,29 @@ export class MessageBridge {
 
     // 即使此任务失败，仍处理下一个任务
     await this.processNextTask(botId, projectId)
+  }
+
+  /**
+   * 添加或更新工具调用
+   * 如果已存在同名的 running 工具，则更新其 detail
+   * 否则添加新的工具调用
+   */
+  private addOrUpdateToolCall(name: string, input: unknown): void {
+    // 查找是否已有同名的 running 工具
+    const existingTool = this.toolCalls.find(t => t.name === name && t.status === 'running')
+
+    if (existingTool) {
+      // 更新现有工具的详情
+      if (input !== undefined) {
+        existingTool.detail = formatToolDetail(name, input)
+      }
+    } else {
+      // 添加新工具
+      this.toolCalls.push({
+        name,
+        detail: input !== undefined ? formatToolDetail(name, input) : '',
+        status: 'running'
+      })
+    }
   }
 }

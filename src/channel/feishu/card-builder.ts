@@ -2,10 +2,16 @@ export interface CardConfig {
   title?: string
   status?: 'thinking' | 'running' | 'success' | 'error'
   content?: string
-  toolCalls?: { name: string; status: string }[]
+  toolCalls?: ToolCall[]
   outputFiles?: { name: string; path: string; size: number }[]
   cost?: number
   duration?: number
+}
+
+export interface ToolCall {
+  name: string
+  detail: string
+  status: string
 }
 
 export function buildCard(config: CardConfig): any {
@@ -69,7 +75,7 @@ export function buildCard(config: CardConfig): any {
       text: {
         tag: 'lark_md',
         content: '**工具调用:**\n' + config.toolCalls.map(t =>
-          `- \`${t.name}\` ${t.status}`
+          t.detail ? `- \`${t.name}\` ${t.detail}` : `- \`${t.name}\``
         ).join('\n')
       }
     })
@@ -190,4 +196,63 @@ export function buildInputPromptCard(prompt: string): any {
       text: { tag: 'lark_md', content: `**${prompt}**\n\n请直接回复消息` }
     }]
   }
+}
+
+/**
+ * 格式化工具调用详情
+ * 参照 feishu-claudecode 项目的 formatToolDetail 实现
+ */
+export function formatToolDetail(name: string, input: unknown): string {
+  if (!input || typeof input !== 'object') return ''
+
+  const inp = input as Record<string, unknown>
+
+  switch (name) {
+    case 'Read':
+      return inp.file_path ? `\`${shortenPath(inp.file_path as string)}\`` : ''
+    case 'Write':
+      return inp.file_path ? `\`${shortenPath(inp.file_path as string)}\`` : ''
+    case 'Edit':
+      return inp.file_path ? `\`${shortenPath(inp.file_path as string)}\`` : ''
+    case 'Bash':
+      return inp.command ? `\`${truncate(inp.command as string, 60)}\`` : ''
+    case 'Glob':
+      return inp.pattern ? `\`${inp.pattern}\`` : ''
+    case 'Grep':
+      return inp.pattern ? `\`${inp.pattern}\`` : ''
+    case 'WebSearch':
+      return inp.query ? `"${truncate(inp.query as string, 50)}"` : ''
+    case 'WebFetch':
+      return inp.url ? `\`${truncate(inp.url as string, 60)}\`` : ''
+    case 'Task':
+      return inp.description ? `${truncate(inp.description as string, 50)}` : ''
+    case 'AskUserQuestion': {
+      const qs = inp.questions
+      if (Array.isArray(qs) && qs.length > 0) {
+        const first = qs[0] as Record<string, unknown>
+        return first.question ? truncate(String(first.question), 50) : ''
+      }
+      return ''
+    }
+    default:
+      return ''
+  }
+}
+
+/**
+ * 缩短文件路径显示
+ * 例如: `/home/user/project/src/index.ts` -> `.../src/index.ts`
+ */
+function shortenPath(filePath: string): string {
+  const parts = filePath.split('/')
+  if (parts.length <= 3) return filePath
+  return '.../' + parts.slice(-2).join('/')
+}
+
+/**
+ * 截断文本到指定长度
+ */
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text
+  return text.slice(0, max) + '...'
 }
