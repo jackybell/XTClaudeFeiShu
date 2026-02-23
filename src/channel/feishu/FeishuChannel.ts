@@ -76,6 +76,12 @@ export class FeishuChannel implements IChannel {
       const eventType = event?.header?.event_type || event?.event_type
       logger.info({ msg: 'Event type', eventType, eventId })
 
+      // 检查卡片回调事件
+      if (eventType === 'card.action.triggered') {
+        await this.handleCardCallback(event)
+        return
+      }
+
       if (eventType !== 'im.message.receive_v1') {
         return
       }
@@ -101,6 +107,40 @@ export class FeishuChannel implements IChannel {
       }
     } catch (error: any) {
       logger.error({ msg: 'Error handling event', error: error?.message || error?.toString(), stack: error?.stack })
+    }
+  }
+
+  private async handleCardCallback(event: any): Promise<void> {
+    try {
+      const action = event.action
+      const userId = event.triggered_user_id?.open_id || event.sender?.sender_id?.open_id
+      const chatId = event.open_chat_id || event.token?.chat_id
+
+      if (!userId || !chatId) {
+        logger.error({ msg: 'Invalid card callback event', event })
+        return
+      }
+
+      // 提取按钮值
+      const actionValue = action?.value || action?.text
+
+      // 从回调创建消息
+      const message: Message = {
+        chatId,
+        userId,
+        userName: userId,
+        text: actionValue,
+        messageType: 'private',
+        rawEvent: event
+      }
+
+      logger.info({ msg: 'Card callback converted to message', actionValue, userId })
+
+      if (this.messageCallback) {
+        await this.messageCallback(message)
+      }
+    } catch (error: any) {
+      logger.error({ msg: 'Error handling card callback', error })
     }
   }
 
