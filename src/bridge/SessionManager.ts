@@ -1,4 +1,4 @@
-import type { Session } from '../types/index.js'
+import type { Session, SessionState, SessionStatus } from '../types/index.js'
 import { logger } from '../utils/logger.js'
 
 const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000 // 24 小时
@@ -6,6 +6,10 @@ const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000 // 24 小时
 export class SessionManager {
   private sessions: Map<string, Session> = new Map()
   private userProjectSelections: Map<string, string> = new Map()
+
+  constructor() {
+    this.startTimeoutChecker()
+  }
 
   private getSessionKey(botId: string, userId: string): string {
     return `${botId}:${userId}`
@@ -91,6 +95,77 @@ export class SessionManager {
     setInterval(() => {
       this.cleanupExpiredSessions()
     }, intervalMs)
+  }
+
+  // 会话状态管理
+  setStatus(sessionKey: string, status: SessionStatus): void {
+    const session = this.sessions.get(sessionKey)
+    if (session) {
+      if (!session.state) {
+        session.state = {
+          status: 'idle' as SessionStatus,
+          currentTaskId: '',
+          expiresAt: 0,
+          chatId: ''
+        }
+      }
+      session.state.status = status
+      logger.info({ msg: 'Session status updated', sessionKey, status })
+    }
+  }
+
+  getState(sessionKey: string): SessionState | undefined {
+    const session = this.sessions.get(sessionKey)
+    return session?.state
+  }
+
+  setState(sessionKey: string, state: Partial<SessionState>): void {
+    const session = this.sessions.get(sessionKey)
+    if (session) {
+      if (!session.state) {
+        session.state = {
+          status: 'idle' as SessionStatus,
+          currentTaskId: '',
+          expiresAt: 0,
+          chatId: ''
+        }
+      }
+      Object.assign(session.state, state)
+      logger.info({ msg: 'Session state updated', sessionKey, state })
+    }
+  }
+
+  clearState(sessionKey: string): void {
+    const session = this.sessions.get(sessionKey)
+    if (session) {
+      session.state = undefined
+      logger.info({ msg: 'Session state cleared', sessionKey })
+    }
+  }
+
+  // 会话超时检查器
+  private startTimeoutChecker(): void {
+    setInterval(() => {
+      const now = Date.now()
+      for (const [key, session] of this.sessions.entries()) {
+        if (session.state && session.state.expiresAt && now > session.state.expiresAt) {
+          if (session.state.status !== 'idle') {
+            logger.warn({ msg: 'Session timed out', key, expiresAt: session.state.expiresAt })
+
+            // 取消执行（如果存在句柄）
+            if (session.state.executionHandle) {
+              try {
+                session.state.executionHandle.finish()
+              } catch (e) {
+                logger.error({ msg: 'Error finishing timed out session', error: e })
+              }
+            }
+
+            this.clearState(key)
+          }
+        }
+      }
+    }, 30000) // 每 30 秒检查一次
   }
 }
 
