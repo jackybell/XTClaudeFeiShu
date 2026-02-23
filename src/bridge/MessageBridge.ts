@@ -1,11 +1,12 @@
 import type { IChannel } from '../channel/IChannel.interface.js'
-import type { Message, Bot, Project } from '../types/index.js'
+import type { Message, Bot, Project, Session } from '../types/index.js'
 import { sessionManager } from './SessionManager.js'
 import { CommandHandler } from './CommandHandler.js'
 import { FileWatcher, type FileChangeEvent } from './FileWatcher.js'
 import { ClaudeExecutor, type SDKMessage } from '../claude/ClaudeExecutor.js'
 import { taskQueue, type QueuedTask } from './TaskQueue.js'
 import { logger } from '../utils/logger.js'
+import { buildConfirmCard, buildChoiceCard, buildInputPromptCard } from '../channel/feishu/card-builder.js'
 import fs from 'fs/promises'
 import path from 'path'
 
@@ -132,11 +133,11 @@ export class MessageBridge {
       const session = sessionManager.getSession(this.bot.id, message.userId)
       const sessionId = session?.claudeSessionId
 
-      // 使用异步生成器执行 Claude
+      // 使用 startExecution 进行多轮执行
       let responseText = ''
       const abortController = new AbortController()
 
-      const stream = this.claudeExecutor.execute({
+      const executionHandle = this.claudeExecutor.startExecution({
         prompt: message.text,
         cwd: project.path,
         sessionId,
@@ -149,72 +150,36 @@ export class MessageBridge {
         plugins: project.plugins,
       })
 
+      // 保存执行句柄到会话状态
+      const sessionKey = `${this.bot.id}:${message.userId}`
+      sessionManager.setState(sessionKey, {
+        status: 'executing',
+        currentTaskId: task.id,
+        executionHandle,
+        chatId: message.chatId,
+        expiresAt: Date.now() + 30 * 60 * 1000 // 30 分钟总超时
+      })
+
       // 处理来自生成器的消息
-      for await (const sdkMessage of stream) {
+      for await (const sdkMessage of executionHandle.stream) {
         if (abortController.signal.aborted) break
 
-        // 处理来自 SDK 的不同消息类型
-        if (sdkMessage.type === 'system') {
-          // 发现技能
-          if (sdkMessage.subtype === 'init' || sdkMessage.subtype === 'config_change') {
-            const skills = (sdkMessage as any).skills || (sdkMessage as any).slash_commands || []
-            if (skills.length > 0) {
-              logger.info({ msg: 'System message: skills available', skills })
-            }
-          }
-        } else if (sdkMessage.type === 'stream_event') {
-          // 流式内容增量
-          const event = sdkMessage.event
-          if (event?.type === 'content_block_delta') {
-            const delta = event.delta
-            if (delta?.type === 'text_delta' && delta.text) {
-              responseText += delta.text
-              await this.updateCard(message.chatId, project, responseText)
-            }
-          } else if (event?.type === 'content_block_start') {
-            const block = event.content_block
-            if (block?.type === 'tool_use') {
-              this.toolCalls.push({ name: block.name || 'unknown', status: 'running' })
-              await this.updateCard(message.chatId, project, responseText)
-            }
-          }
-        } else if (sdkMessage.type === 'assistant') {
-          // 完整的助手消息
-          const content = sdkMessage.message?.content
-          if (content) {
-            for (const block of content) {
-              if (block.type === 'text' && block.text) {
-                responseText += block.text
-                await this.updateCard(message.chatId, project, responseText)
-              } else if (block.type === 'tool_use') {
-                this.toolCalls.push({ name: block.name || 'unknown', status: 'running' })
-                await this.updateCard(message.chatId, project, responseText)
-              }
-            }
-          }
-        } else if (sdkMessage.type === 'result') {
-          // 执行结果
-          logger.info({ msg: 'Result message received', result_type: sdkMessage.result_type })
-
-          if (sdkMessage.result_type === 'error_during_execution') {
-            logger.error({ msg: 'Execution error', error: sdkMessage.error })
-            throw new Error(`Execution error: ${sdkMessage.error || 'Unknown error'}`)
-          } else if (sdkMessage.result_type === 'error_max_turns') {
-            throw new Error(`Max turns (${sdkMessage.max_turns}) exceeded`)
-          } else if (sdkMessage.result_type === 'error_max_budget_usd') {
-            throw new Error(`Max budget ($${sdkMessage.max_budget_usd}) exceeded`)
-          }
-
-          // 成功完成 - 保存会话
-          if (sdkMessage.session_id) {
-            sessionManager.getOrCreateSession(
-              this.bot.id,
-              message.userId,
-              project.id,
-              sdkMessage.session_id
-            )
-          }
+        // 检查用户输入请求
+        if (sdkMessage.type === 'user_input_required') {
+          await this.handleUserInputRequest(sessionKey, sdkMessage, message.chatId)
+          break // 暂停执行
         }
+
+        // 处理其他 SDK 消息类型
+        await this.processSDKMessage(sdkMessage, message.chatId, project.id, (text) => {
+          responseText = text
+        })
+      }
+
+      // 如果正常完成（非等待用户输入），处理完成逻辑
+      const currentState = sessionManager.getState(sessionKey)
+      if (currentState && currentState.status !== 'waiting_input' && currentState.status !== 'waiting_confirm') {
+        await this.handleExecutionComplete(sessionKey, task, message.chatId, message.userId, project.id, responseText)
       }
 
       logger.info({ msg: 'Claude execute finished', responseTextLength: responseText.length })
@@ -261,32 +226,8 @@ export class MessageBridge {
       const errorStack = error instanceof Error ? error.stack : undefined
       logger.error({ msg: 'Task execution error', error: errorMessage, stack: errorStack })
 
-      // 标记任务为失败
-      taskQueue.fail(task.id!, errorMessage)
-
-      // 在发送错误卡片之前清除所有待处理的更新
-      if (this.pendingUpdate) {
-        clearTimeout(this.pendingUpdate)
-        this.pendingUpdate = null
-      }
-
-      const errorCard = {
-        type: 'error' as const,
-        content: {
-          status: 'error' as const,
-          title: `错误 [${taskDisplayId}]`,
-          content: errorMessage
-        }
-      }
-
-      if (this.currentCardId) {
-        await this.channel.updateCard(message.chatId, this.currentCardId, errorCard)
-      } else {
-        this.currentCardId = await this.channel.sendCard(message.chatId, errorCard)
-      }
-
-      // 即使此任务失败，仍处理下一个任务
-      await this.processNextTask(this.bot.id, project.id)
+      // 使用统一的错误处理
+      await this.handleExecutionError(`${this.bot.id}:${message.userId}`, task, message.chatId, errorMessage, this.bot.id, project.id)
 
     } finally {
       this.fileWatcher?.stop()
@@ -405,5 +346,257 @@ export class MessageBridge {
         isMine: t.message.userId === message.userId
       }))
     }
+  }
+
+  /**
+   * 处理用户输入请求
+   */
+  private async handleUserInputRequest(sessionKey: string, sdkMessage: any, chatId: string): Promise<void> {
+    const inputType = sdkMessage.input_type || 'text'
+    const prompt = sdkMessage.prompt || '请输入：'
+    const options = sdkMessage.options || []
+
+    logger.info({ msg: 'User input required', inputType, prompt })
+
+    let card
+
+    if (inputType === 'confirmation') {
+      card = {
+        type: 'status',
+        content: buildConfirmCard(prompt, options)
+      }
+      sessionManager.setStatus(sessionKey, 'waiting_confirm')
+    } else if (inputType === 'choice') {
+      card = {
+        type: 'status',
+        content: buildChoiceCard(prompt, options)
+      }
+      sessionManager.setStatus(sessionKey, 'waiting_confirm')
+    } else {
+      card = {
+        type: 'status',
+        content: buildInputPromptCard(prompt)
+      }
+      sessionManager.setStatus(sessionKey, 'waiting_input')
+    }
+
+    // 更新状态，包含请求信息和超时
+    sessionManager.setState(sessionKey, {
+      inputRequest: { type: inputType, prompt, options },
+      expiresAt: Date.now() + 5 * 60 * 1000 // 5 分钟超时
+    })
+
+    // 发送卡片
+    const cardId = await this.channel.sendCard(chatId, card)
+    logger.info({ msg: 'Input request card sent', cardId, inputType })
+  }
+
+  /**
+   * 恢复执行
+   */
+  async resumeExecution(session: Session): Promise<void> {
+    if (!session.state?.executionHandle) {
+      logger.error({ msg: 'No execution handle to resume' })
+      return
+    }
+
+    const { executionHandle } = session.state
+    const project = this.bot.projects.find(p => p.id === session.projectId)
+    if (!project) {
+      logger.error({ msg: 'Project not found for resume', projectId: session.projectId })
+      return
+    }
+
+    logger.info({ msg: 'Resuming execution after user input' })
+
+    try {
+      let responseText = ''
+      // 继续处理消息流
+      for await (const sdkMessage of executionHandle.stream) {
+        const currentState = sessionManager.getState(`${session.botId}:${session.userId}`)
+        if (this.currentTaskId && currentState?.executionHandle) {
+          await this.processSDKMessage(sdkMessage, currentState.chatId, session.projectId, (text) => {
+            responseText = text
+          })
+        }
+      }
+
+      // 执行完成
+      const sessionKey = `${session.botId}:${session.userId}`
+      const currentState = sessionManager.getState(sessionKey)
+      if (currentState) {
+        const task = taskQueue.getTasks(session.botId, session.projectId).find(t => t.id === currentState.currentTaskId)
+        if (task) {
+          await this.handleExecutionComplete(sessionKey, task, currentState.chatId, session.userId, session.projectId, responseText)
+        }
+      }
+    } catch (error) {
+      await this.handleExecutionError(`${session.botId}:${session.userId}`, null, session.state?.chatId || '', String(error), session.botId, session.projectId)
+    }
+  }
+
+  /**
+   * 处理 SDK 消息（提取的通用逻辑）
+   */
+  private async processSDKMessage(sdkMessage: any, chatId: string, projectId: string, updateResponseText: (text: string) => void): Promise<void> {
+    const project = this.bot.projects.find(p => p.id === projectId)
+    if (!project) return
+
+    if (sdkMessage.type === 'system') {
+      // 发现技能
+      if (sdkMessage.subtype === 'init' || sdkMessage.subtype === 'config_change') {
+        const skills = (sdkMessage as any).skills || (sdkMessage as any).slash_commands || []
+        if (skills.length > 0) {
+          logger.info({ msg: 'System message: skills available', skills })
+        }
+      }
+    } else if (sdkMessage.type === 'stream_event') {
+      // 流式内容增量
+      const event = sdkMessage.event
+      if (event?.type === 'content_block_delta') {
+        const delta = event.delta
+        if (delta?.type === 'text_delta' && delta.text) {
+          updateResponseText(delta.text)
+          await this.updateCard(chatId, project, delta.text)
+        }
+      } else if (event?.type === 'content_block_start') {
+        const block = event.content_block
+        if (block?.type === 'tool_use') {
+          this.toolCalls.push({ name: block.name || 'unknown', status: 'running' })
+          await this.updateCard(chatId, project, '')
+        }
+      }
+    } else if (sdkMessage.type === 'assistant') {
+      // 完整的助手消息
+      const content = sdkMessage.message?.content
+      if (content) {
+        for (const block of content) {
+          if (block.type === 'text' && block.text) {
+            updateResponseText(block.text)
+            await this.updateCard(chatId, project, block.text)
+          } else if (block.type === 'tool_use') {
+            this.toolCalls.push({ name: block.name || 'unknown', status: 'running' })
+            await this.updateCard(chatId, project, '')
+          }
+        }
+      }
+    } else if (sdkMessage.type === 'result') {
+      // 执行结果
+      logger.info({ msg: 'Result message received', result_type: sdkMessage.result_type })
+
+      if (sdkMessage.result_type === 'error_during_execution') {
+        logger.error({ msg: 'Execution error', error: sdkMessage.error })
+        throw new Error(`Execution error: ${sdkMessage.error || 'Unknown error'}`)
+      } else if (sdkMessage.result_type === 'error_max_turns') {
+        throw new Error(`Max turns (${sdkMessage.max_turns}) exceeded`)
+      } else if (sdkMessage.result_type === 'error_max_budget_usd') {
+        throw new Error(`Max budget ($${sdkMessage.max_budget_usd}) exceeded`)
+      }
+
+      // 注意：会话保存在 handleExecutionComplete 中处理
+    }
+  }
+
+  /**
+   * 处理执行完成
+   */
+  private async handleExecutionComplete(
+    sessionKey: string,
+    task: QueuedTask | null,
+    chatId: string,
+    userId: string,
+    projectId: string,
+    responseText: string
+  ): Promise<void> {
+    const project = this.bot.projects.find(p => p.id === projectId)
+    if (!project) return
+
+    // 清除状态
+    sessionManager.clearState(sessionKey)
+
+    // 在发送最终卡片之前清除所有待处理的更新
+    if (this.pendingUpdate) {
+      clearTimeout(this.pendingUpdate)
+      this.pendingUpdate = null
+    }
+
+    // 最终结果卡片 - 更新现有卡片
+    logger.info({ msg: 'Preparing final result card', currentCardId: this.currentCardId })
+    const duration = this.startTime ? Date.now() - this.startTime : 0
+    const taskDisplayId = task?.id.slice(5, 18) || 'unknown'
+    const finalCard = {
+      type: 'result' as const,
+      content: {
+        status: 'success' as const,
+        title: `任务完成 [${taskDisplayId}]`,
+        content: responseText || '完成',
+        toolCalls: this.toolCalls,
+        outputFiles: this.outputFiles,
+        duration
+      }
+    }
+
+    if (this.currentCardId) {
+      logger.info({ msg: 'Updating final result card', cardId: this.currentCardId })
+      await this.channel.updateCard(chatId, this.currentCardId, finalCard)
+      logger.info({ msg: 'Final result card updated successfully' })
+    } else {
+      logger.info({ msg: 'Sending final result card as new card' })
+      this.currentCardId = await this.channel.sendCard(chatId, finalCard)
+      logger.info({ msg: 'Final result card sent successfully', cardId: this.currentCardId })
+    }
+
+    // 标记任务为已完成
+    if (task) {
+      taskQueue.complete(task.id!)
+    }
+
+    // 处理队列中的下一个任务
+    await this.processNextTask(this.bot.id, project.id)
+  }
+
+  /**
+   * 处理执行错误
+   */
+  private async handleExecutionError(
+    sessionKey: string,
+    task: QueuedTask | null,
+    chatId: string,
+    errorMessage: string,
+    botId: string,
+    projectId: string
+  ): Promise<void> {
+    // 清除状态
+    sessionManager.clearState(sessionKey)
+
+    // 标记任务为失败
+    if (task) {
+      taskQueue.fail(task.id!, errorMessage)
+    }
+
+    // 在发送错误卡片之前清除所有待处理的更新
+    if (this.pendingUpdate) {
+      clearTimeout(this.pendingUpdate)
+      this.pendingUpdate = null
+    }
+
+    const taskDisplayId = task?.id.slice(5, 18) || 'unknown'
+    const errorCard = {
+      type: 'error' as const,
+      content: {
+        status: 'error' as const,
+        title: `错误 [${taskDisplayId}]`,
+        content: errorMessage
+      }
+    }
+
+    if (this.currentCardId) {
+      await this.channel.updateCard(chatId, this.currentCardId, errorCard)
+    } else {
+      this.currentCardId = await this.channel.sendCard(chatId, errorCard)
+    }
+
+    // 即使此任务失败，仍处理下一个任务
+    await this.processNextTask(botId, projectId)
   }
 }
