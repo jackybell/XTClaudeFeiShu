@@ -47,3 +47,6 @@ xtbot.json
 
 # Documentation
 docs/
+
+# Claude Code settings
+.claude/
