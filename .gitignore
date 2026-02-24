@@ -44,3 +44,6 @@ temp/
 workspace/
 .user-data/
 xtbot.json
+
+# Documentation
+docs/
