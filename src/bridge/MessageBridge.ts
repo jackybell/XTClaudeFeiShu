@@ -303,7 +303,7 @@ export class MessageBridge {
     // 节流更新以避免飞书速率限制
     const now = Date.now()
     const timeSinceLastUpdate = now - this.lastUpdateTime
-    const minUpdateInterval = 5000 // 更新间隔 5 秒
+    const minUpdateInterval = 1000 // 更新间隔 1 秒
 
     // 存储待处理的卡片内容
     this.pendingCardContent = { chatId, card }

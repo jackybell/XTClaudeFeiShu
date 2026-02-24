@@ -3,7 +3,6 @@ import { logger } from '../utils/logger.js'
 import { AsyncQueue } from '../utils/async-queue.js'
 import path from 'node:path'
 import os from 'node:os'
-import type { Project } from '../types/index.js'
 
 export interface ExecutorOptions {
   prompt: string

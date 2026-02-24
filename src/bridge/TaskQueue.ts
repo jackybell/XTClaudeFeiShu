@@ -23,7 +23,7 @@ export interface TaskQueueStats {
 export class TaskQueue {
   // 队列键："botId:projectId"
   private queues: Map<string, QueuedTask[]> = new Map()
-  private runningTasks: Set<string> = new Map<`${string}:${string}`, string>()
+  private runningTasks: Map<string, string> = new Map()
 
   /**
    * 获取机器人和项目的队列键

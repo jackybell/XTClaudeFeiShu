@@ -46,6 +46,22 @@
           "maxTurns": 100,
           "maxBudgetUsd": 1.5,
           "enableSkills": false
+        },
+        {
+          "id": "priceconfigh5",
+          "name": "价签管理配置",
+          "path": "D:\\code\\researchproject\\priceconfigh5",
+          "allowedTools": [
+            "Read",
+            "Edit",
+            "Write",
+            "Glob",
+            "Grep",
+            "Bash"
+          ],
+          "maxTurns": 100,
+          "maxBudgetUsd": 1.5,
+          "enableSkills": false
         }
       ],
       "currentProjectId": "proj-001"

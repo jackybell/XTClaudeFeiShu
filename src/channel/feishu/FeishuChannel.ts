@@ -20,7 +20,7 @@ export class FeishuChannel implements IChannel {
 
   constructor(
     private appId: string,
-    private appSecret: string,
+    appSecret: string,
     botId: string
   ) {
     this.client = new lark.Client({
@@ -67,7 +67,9 @@ export class FeishuChannel implements IChannel {
       // 清理旧的事件 ID 以防止内存泄漏
       if (this.processedEvents.size > this.MAX_PROCESSED_EVENTS) {
         const firstEvent = this.processedEvents.values().next().value
-        this.processedEvents.delete(firstEvent)
+        if (firstEvent) {
+          this.processedEvents.delete(firstEvent)
+        }
       }
 
       logger.info({ msg: 'Event received', eventId, eventKeys: Object.keys(event) })
@@ -174,7 +176,7 @@ export class FeishuChannel implements IChannel {
       }
     })
     // 返回消息 ID 用于后续更新
-    const messageId = result?.data?.message_id || result?.message_id || ''
+    const messageId = (result?.data as any)?.message_id || (result as any)?.message_id || ''
     logger.info({ msg: 'Card sent', cardId: messageId, cardType: card.type, hasMessageId: !!messageId })
     return messageId
   }

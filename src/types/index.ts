@@ -1,10 +1,5 @@
 // 会话状态类型
-export enum SessionStatus {
-  IDLE = 'idle',
-  EXECUTING = 'executing',
-  WAITING_INPUT = 'waiting_input',
-  WAITING_CONFIRM = 'waiting_confirm'
-}
+export type SessionStatus = 'idle' | 'executing' | 'waiting_input' | 'waiting_confirm'
 
 // 输入请求类型
 export interface InputRequest {
@@ -93,7 +88,7 @@ export interface Session {
 
 // 命令类型
 export interface Command {
-  type: 'switch' | 'reset' | 'stop' | 'help' | 'skills' | 'projects'
+  type: 'switch' | 'reset' | 'stop' | 'status' | 'help' | 'skills' | 'projects'
   args: string[]
   options: {
     clear?: boolean

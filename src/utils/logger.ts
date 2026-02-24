@@ -2,8 +2,6 @@ import pino from 'pino'
 import fs from 'fs'
 import path from 'path'
 
-const isDevelopment = process.env.NODE_ENV !== 'production'
-
 // 确保日志目录存在
 const logsDir = path.join(process.cwd(), 'logs')
 if (!fs.existsSync(logsDir)) {

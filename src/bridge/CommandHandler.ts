@@ -123,7 +123,7 @@ export class CommandHandler {
 
   // 添加新方法来处理用户响应
   private async sendUserResponse(session: Session, message: Message): Promise<void> {
-    const { executionHandle, inputRequest, chatId } = session.state!
+    const { executionHandle, chatId } = session.state!
 
     if (!executionHandle) {
       await this.channelSendText(chatId, '会话已过期，请重新开始')

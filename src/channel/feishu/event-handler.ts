@@ -1,5 +1,4 @@
 import type { Message } from '../../types/index.js'
-import type { FeishuEvent } from '../types.js'
 
 export class FeishuEventHandler {
   private botId: string

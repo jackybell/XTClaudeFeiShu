@@ -103,7 +103,7 @@ export class SessionManager {
     if (session) {
       if (!session.state) {
         session.state = {
-          status: 'idle' as SessionStatus,
+          status: 'idle',
           currentTaskId: '',
           expiresAt: 0,
           chatId: ''
@@ -124,7 +124,7 @@ export class SessionManager {
     if (session) {
       if (!session.state) {
         session.state = {
-          status: 'idle' as SessionStatus,
+          status: 'idle',
           currentTaskId: '',
           expiresAt: 0,
           chatId: ''
