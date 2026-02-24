@@ -53,6 +53,26 @@ export class MessageBridge {
       return
     }
 
+    // 检查用户是否有活跃的会话（有 executionHandle）
+    const session = sessionManager.getSession(this.bot.id, message.userId)
+    if (session?.state?.executionHandle) {
+      logger.info({
+        msg: 'User has active session, sending as reply',
+        userId: message.userId,
+        status: session.state.status
+      })
+      // 将消息作为回复发送给 SDK
+      try {
+        session.state.executionHandle.sendMessage(message.text)
+        sessionManager.setStatus(`${this.bot.id}:${message.userId}`, 'executing')
+        await this.channel.sendText(message.chatId, '已收到你的回复，继续执行...')
+        await this.resumeExecution(session)
+        return
+      } catch (error) {
+        logger.error({ msg: 'Error sending reply to SDK', error })
+      }
+    }
+
     // 检查该机器人的项目是否已有任务在运行
     if (taskQueue.isRunning(this.bot.id, project.id)) {
       // 将任务加入队列 - 它会等待
