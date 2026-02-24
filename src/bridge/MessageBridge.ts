@@ -210,6 +210,13 @@ export class MessageBridge {
         this.pendingUpdate = null
       }
 
+      // 确保所有工具状态为完成（用于未调用 handleExecutionComplete 的情况）
+      for (const tool of this.toolCalls) {
+        if (tool.status === 'running') {
+          tool.status = 'done'
+        }
+      }
+
       // 最终结果卡片 - 更新现有卡片
       logger.info({ msg: 'Preparing final result card', currentCardId: this.currentCardId })
       const duration = this.startTime ? Date.now() - this.startTime : 0
@@ -521,6 +528,10 @@ export class MessageBridge {
             // assistant 消息中的 tool_use 通常包含完整的 input
             this.addToolCall(block.name, block.input)
             await this.updateCard(chatId, project, currentResponseText, taskDisplayId)
+          } else if (block.type === 'tool_result') {
+            // 工具执行完成，将最后一个运行中的工具标记为完成
+            this.completeLastTool()
+            await this.updateCard(chatId, project, currentResponseText, taskDisplayId)
           }
         }
       }
@@ -541,6 +552,13 @@ export class MessageBridge {
   ): Promise<void> {
     const project = this.bot.projects.find(p => p.id === projectId)
     if (!project) return
+
+    // 将所有运行中的工具标记为完成
+    for (const tool of this.toolCalls) {
+      if (tool.status === 'running') {
+        tool.status = 'done'
+      }
+    }
 
     // 清除状态
     sessionManager.clearState(sessionKey)
@@ -641,5 +659,19 @@ export class MessageBridge {
       detail: input !== undefined ? formatToolDetail(name, input) : '',
       status: 'running'
     })
+  }
+
+  /**
+   * 将最后一个运行中的工具标记为完成
+   * 当收到 tool_result 消息时调用
+   */
+  private completeLastTool(): void {
+    // 从后往前找最后一个状态为 running 的工具
+    for (let i = this.toolCalls.length - 1; i >= 0; i--) {
+      if (this.toolCalls[i].status === 'running') {
+        this.toolCalls[i].status = 'done'
+        break
+      }
+    }
   }
 }

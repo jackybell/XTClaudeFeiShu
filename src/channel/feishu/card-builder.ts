@@ -8,10 +8,12 @@ export interface CardConfig {
   duration?: number
 }
 
+export type ToolCallStatus = 'running' | 'done' | 'error'
+
 export interface ToolCall {
   name: string
   detail: string
-  status: string
+  status: ToolCallStatus
 }
 
 export function buildCard(config: CardConfig): any {
@@ -70,12 +72,18 @@ export function buildCard(config: CardConfig): any {
     card.elements.push({
       tag: 'hr'
     })
+    // 根据状态显示不同图标
+    const statusIcons: Record<string, string> = {
+      running: '🔄',  // 运行中
+      done: '✅',     // 完成
+      error: '❌'      // 错误
+    }
     card.elements.push({
       tag: 'div',
       text: {
         tag: 'lark_md',
         content: '**工具调用:**\n' + config.toolCalls.map(t =>
-          t.detail ? `- \`${t.name}\` ${t.detail}` : `- \`${t.name}\``
+          `${statusIcons[t.status] || '⏳'} \`${t.name}\`${t.detail ? ' ' + t.detail : ''}`
         ).join('\n')
       }
     })
