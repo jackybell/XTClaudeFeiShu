@@ -190,7 +190,7 @@ export class MessageBridge {
         }
 
         // 处理其他 SDK 消息类型
-        logger.debug(`zhongguanhui :[${taskDisplayId}]其他消息`)
+        // logger.debug(`zhongguanhui :[${taskDisplayId}]其他消息`)
         await this.processSDKMessage(sdkMessage, message.chatId, project.id, taskDisplayId,(text) => {
           responseText = text
         })

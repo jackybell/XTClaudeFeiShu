@@ -264,7 +264,7 @@ export class CommandHandler {
     if (myWaitingTasks.length > 0) {
       content += `**你的等待任务**\n`
       for (const task of myWaitingTasks) {
-        content += `- 第 ${task.position! + 1} 位 (ID: ${task.id.slice(0, 8)}...)\n`
+        content += `- 第 ${task.position! + 1} 位 (ID: ${task.id})\n`
       }
       content += '\n'
     }
