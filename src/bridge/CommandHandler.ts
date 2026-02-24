@@ -24,7 +24,6 @@ export class CommandHandler {
     const parts = trimmed.split(/\s+/)
     const command = parts[0].slice(1) // 移除 /
     const args = parts.slice(1)
-    const options: { clear?: boolean } = {}
     let subCommand: 'list' | 'add' | 'remove' | undefined
 
     // 解析 /projects 的子命令
@@ -35,19 +34,12 @@ export class CommandHandler {
       }
     }
 
-    // 解析选项
-    const clearIndex = args.indexOf('--clear')
-    if (clearIndex !== -1) {
-      options.clear = true
-      args.splice(clearIndex, 1)
-    }
-
     const validCommands = ['switch', 'reset', 'stop', 'status', 'help', 'skills', 'projects']
     if (!validCommands.includes(command)) {
       return null
     }
 
-    return { type: command as any, args, options, subCommand }
+    return { type: command as any, args, subCommand }
   }
 
   async handle(message: Message): Promise<boolean> {
@@ -156,13 +148,22 @@ export class CommandHandler {
     const projectName = command.args[0]
 
     if (!projectName) {
+      // 获取用户当前选择的项目
+      const currentUserProjectId = sessionManager.getUserProject(
+        this.bot.id,
+        message.userId,
+        this.bot.currentProjectId
+      )
+      const currentProject = this.bot.projects.find(p => p.id === currentUserProjectId)
+      const currentProjectName = currentProject?.name || '未知'
+
       const projects = this.bot.projects.map(p => `- ${p.name}`).join('\n')
       await this.channelSendCard(message.chatId, {
         type: 'status',
         content: {
           status: 'success',
           title: '可用项目',
-          content: `当前: **${this.getCurrentProjectName()}**\n\n可用项目:\n${projects}\n\n用法: \`/switch <项目名> [--clear]\``
+          content: `当前: **${currentProjectName}**\n\n可用项目:\n${projects}\n\n用法: \`/switch <项目名>\``
         }
       })
       return
@@ -178,17 +179,15 @@ export class CommandHandler {
     // 更新用户的项目选择
     sessionManager.setUserProject(this.bot.id, message.userId, project.id)
 
-    // 处理 --clear 选项
-    if (command.options.clear) {
-      sessionManager.deleteSession(this.bot.id, message.userId)
-    }
+    // 切换项目时总是清除旧的会话，确保下次执行使用正确的项目
+    sessionManager.deleteSession(this.bot.id, message.userId)
 
     await this.channelSendCard(message.chatId, {
       type: 'status',
       content: {
         status: 'success',
         title: '项目已切换',
-        content: `已切换到 **${project.name}**\n路径: \`${project.path}\`\n\n${command.options.clear ? '已清除之前的会话。' : '保留了之前的会话。'}`
+        content: `已切换到 **${project.name}**\n路径: \`${project.path}\`\n\n之前的会话已清除，下一条消息将开始新的对话。`
       }
     })
   }
@@ -299,7 +298,7 @@ export class CommandHandler {
       content: {
         status: 'success',
         title: '可用命令',
-        content: `**/switch <项目> [--clear]** - 切换项目\n**/reset** - 重置当前会话\n**/stop** - 取消等待中的任务\n**/status** - 查看任务队列状态\n**/skills** - 查看可用技能\n**/projects [list|add|remove]** - 管理项目\n**/help** - 显示此帮助\n\n可用项目:\n${projects}`
+        content: `**/switch <项目>** - 切换项目（清除当前会话）\n**/reset** - 重置当前会话\n**/stop** - 取消等待中的任务\n**/status** - 查看任务队列状态\n**/skills** - 查看可用技能\n**/projects [list|add|remove]** - 管理项目\n**/help** - 显示此帮助\n\n可用项目:\n${projects}`
       }
     })
   }
@@ -375,8 +374,15 @@ export class CommandHandler {
   }
 
   private async handleProjectsList(message: Message): Promise<void> {
+    // 获取用户选择的项目
+    const currentUserProjectId = sessionManager.getUserProject(
+      this.bot.id,
+      message.userId,
+      this.bot.currentProjectId
+    )
+
     const projectsList = this.bot.projects.map(p => {
-      const isCurrent = p.id === this.bot.currentProjectId
+      const isCurrent = p.id === currentUserProjectId
       const skillsStatus = p.enableSkills ? '✓' : '✗'
       return [
         `${isCurrent ? '→' : ' '} **${p.name}** (\`${p.id}\`)`,
@@ -508,8 +514,4 @@ export class CommandHandler {
     }
   }
 
-  private getCurrentProjectName(): string {
-    const project = this.bot.projects.find(p => p.id === this.bot.currentProjectId)
-    return project?.name || '未知'
-  }
 }

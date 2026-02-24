@@ -90,8 +90,5 @@ export interface Session {
 export interface Command {
   type: 'switch' | 'reset' | 'stop' | 'status' | 'help' | 'skills' | 'projects'
   args: string[]
-  options: {
-    clear?: boolean
-  }
   subCommand?: 'list' | 'add' | 'remove'
 }

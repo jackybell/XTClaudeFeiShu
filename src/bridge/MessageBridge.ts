@@ -197,6 +197,11 @@ export class MessageBridge {
         // 检查结果消息 - 执行完成
         if (sdkMessage.type === 'result') {
           logger.info({ msg: 'Result message received, breaking loop', result_type: sdkMessage.result_type })
+          // 如果有 result 字段，用它替换流式文字
+          if (sdkMessage.result) {
+            logger.info({ msg: 'Using result field to replace streaming text', resultLength: sdkMessage.result.length })
+            responseText = sdkMessage.result
+          }
           // 保存 session_id
           if (sdkMessage.session_id) {
             sessionManager.getOrCreateSession(
@@ -466,6 +471,11 @@ export class MessageBridge {
           // 检查结果消息 - 执行完成
           if (sdkMessage.type === 'result') {
             logger.info({ msg: 'Result message received in resume, breaking loop', result_type: sdkMessage.result_type })
+            // 如果有 result 字段，用它替换流式文字
+            if (sdkMessage.result) {
+              logger.info({ msg: 'Using result field to replace streaming text in resume', resultLength: sdkMessage.result.length })
+              responseText = sdkMessage.result
+            }
             // 保存 session_id
             if (sdkMessage.session_id) {
               sessionManager.getOrCreateSession(
@@ -674,6 +684,9 @@ export class MessageBridge {
    * 每次工具调用都是独立记录，即使同名工具也分别记录
    */
   private addToolCall(name: string, input: unknown): void {
+    // 新 tool_use 出现意味着上一个 toolcall 已完成
+    this.completeLastTool()
+
     this.toolCalls.push({
       name,
       detail: input !== undefined ? formatToolDetail(name, input) : '',
