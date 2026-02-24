@@ -1,0 +1,36 @@
+{
+  "$schema": "./xtbot.schema.json",
+  "adminOpenIds": [
+    "ou_your_admin_open_id_here"
+  ],
+  "bots": [
+    {
+      "id": "bot-001",
+      "name": "我的 Claude 机器人",
+      "channel": "feishu",
+      "feishuAppId": "cli_your_app_id_here",
+      "feishuAppSecret": "your_app_secret_here",
+      "projects": [
+        {
+          "id": "proj-001",
+          "name": "示例项目",
+          "path": "/absolute/path/to/your/project",
+          "allowedTools": [
+            "Read",
+            "Edit",
+            "Write",
+            "Glob",
+            "Grep",
+            "Bash"
+          ],
+          "maxTurns": 100,
+          "maxBudgetUsd": 1.5,
+          "enableSkills": true,
+          "settingSources": ["user", "project"],
+          "plugins": []
+        }
+      ],
+      "currentProjectId": "proj-001"
+    }
+  ]
+}
