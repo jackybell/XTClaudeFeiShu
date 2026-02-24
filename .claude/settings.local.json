@@ -43,7 +43,8 @@
       "Bash(where:*)",
       "Bash(git tag:*)",
       "Bash(ls:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "mcp__zread__get_repo_structure"
     ]
   }
 }

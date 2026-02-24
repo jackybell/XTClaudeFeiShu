@@ -3,6 +3,7 @@ import { logger } from '../utils/logger.js'
 import { AsyncQueue } from '../utils/async-queue.js'
 import path from 'node:path'
 import os from 'node:os'
+import fs from 'node:fs'
 
 export interface ExecutorOptions {
   prompt: string
@@ -71,6 +72,46 @@ export interface ExecutionHandle {
 }
 
 export class ClaudeExecutor {
+  /**
+   * 验证 Claude 可执行文件路径的安全性
+   * 防止命令注入和路径遍历攻击
+   */
+  private validateExecutablePath(executablePath: string): { valid: boolean; error?: string } {
+    // 1. 必须是绝对路径
+    if (!path.isAbsolute(executablePath)) {
+      return { valid: false, error: 'Claude executable path must be absolute' }
+    }
+
+    // 2. 规范化路径并检查路径遍历
+    const normalizedPath = path.normalize(executablePath)
+    if (normalizedPath !== executablePath.replace(/\//g, path.sep).replace(/\\/g, path.sep)) {
+      // 允许路径规范化差异，但检查可疑模式
+      if (executablePath.includes('..') || executablePath.includes('~')) {
+        return { valid: false, error: 'Claude executable path contains suspicious path traversal patterns' }
+      }
+    }
+
+    // 3. 检查文件是否存在
+    try {
+      const stats = fs.statSync(normalizedPath)
+      if (!stats.isFile()) {
+        return { valid: false, error: 'Claude executable path does not point to a file' }
+      }
+    } catch (err) {
+      return { valid: false, error: `Claude executable file not found: ${normalizedPath}` }
+    }
+
+    // 4. 检查路径中的特殊字符（潜在的命令注入）
+    const dangerousChars = ['$', '`', '|', ';', '&', '<', '>', '\n', '\r']
+    for (const char of dangerousChars) {
+      if (executablePath.includes(char)) {
+        return { valid: false, error: `Claude executable path contains dangerous character: ${char}` }
+      }
+    }
+
+    return { valid: true }
+  }
+
   private buildQueryOptions(options: ExecutorOptions): Record<string, unknown> {
     // 将环境变量传递给子进程（用于 ANTHROPIC_AUTH_TOKEN 等）
     // const env: Record<string, string> = {
@@ -94,11 +135,26 @@ export class ClaudeExecutor {
     const isWindows = os.platform() === 'win32'
 
     if (claudeExecutablePath) {
+      // 安全验证：防止命令注入和路径遍历攻击
+      const validation = this.validateExecutablePath(claudeExecutablePath)
+      if (!validation.valid) {
+        logger.error({ msg: 'Invalid Claude executable path', error: validation.error, path: claudeExecutablePath })
+        throw new Error(`Security error: ${validation.error}`)
+      }
+
       if (isWindows && claudeExecutablePath.endsWith('.cmd')) {
         // 在 Windows 上，.cmd 文件不能直接生成
         // 使用 node 可执行文件并将 cli.js 作为参数
         const cmdDir = path.dirname(claudeExecutablePath)
         const cliJsPath = path.join(cmdDir, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js')
+
+        // 验证推导出的 cli.js 路径也存在
+        const cliValidation = this.validateExecutablePath(cliJsPath)
+        if (!cliValidation.valid) {
+          logger.error({ msg: 'Claude CLI not found at expected location', error: cliValidation.error, cliJsPath })
+          throw new Error(`Security error: ${cliValidation.error}`)
+        }
+
         queryOptions.executable = 'node' as const
         queryOptions.executableArgs = [cliJsPath]
         logger.info({ msg: 'Using Claude Code executable (Windows)', cliJsPath })

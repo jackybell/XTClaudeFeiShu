@@ -1,4 +1,5 @@
 import type { Message } from '../../types/index.js'
+import { logger } from '../../utils/logger.js'
 
 export class FeishuEventHandler {
   private botId: string
@@ -46,8 +47,7 @@ export class FeishuEventHandler {
 
     try {
       // 记录原始内容用于调试
-      console.log('Raw content:', message.content)
-      console.log('Content type:', typeof message.content)
+      logger.debug({ msg: 'Raw message content', content: message.content, contentType: typeof message.content })
 
       const content = JSON.parse(message.content)
 
@@ -55,8 +55,7 @@ export class FeishuEventHandler {
         return { text: content.text }
       }
     } catch (error) {
-      console.error('Failed to parse message content:', error)
-      console.error('Raw content string:', message.content)
+      logger.error({ msg: 'Failed to parse message content', error, rawContent: message.content })
     }
 
     // TODO: 处理图片和文件类型
