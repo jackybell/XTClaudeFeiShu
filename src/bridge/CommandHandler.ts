@@ -141,6 +141,11 @@ export class CommandHandler {
 
       // 通知用户
       await this.channelSendText(chatId, '已收到你的回复，继续执行...')
+
+      // 继续执行以处理 SDK 的响应
+      if (this.messageBridge) {
+        await this.messageBridge.resumeExecution(session)
+      }
     } catch (error) {
       logger.error({ msg: 'Error sending response to SDK', error })
       await this.channelSendText(chatId, `发送响应失败: ${error}`)
