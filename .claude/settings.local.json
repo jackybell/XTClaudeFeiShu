@@ -42,7 +42,8 @@
       "Skill(superpowers:systematic-debugging)",
       "Bash(where:*)",
       "Bash(git tag:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

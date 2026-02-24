@@ -191,7 +191,7 @@ export class MessageBridge {
 
         // 处理其他 SDK 消息类型
         // logger.debug(`zhongguanhui :[${taskDisplayId}]其他消息`)
-        await this.processSDKMessage(sdkMessage, message.chatId, project.id, taskDisplayId,(text) => {
+        await this.processSDKMessage(sdkMessage, message.chatId, project.id, taskDisplayId, responseText, (text) => {
           responseText = text
         })
       }
@@ -451,7 +451,7 @@ export class MessageBridge {
             break // 退出循环
           }
 
-          await this.processSDKMessage(sdkMessage, currentState.chatId, session.projectId, taskDisplayId,(text) => {
+          await this.processSDKMessage(sdkMessage, currentState.chatId, session.projectId, taskDisplayId, responseText, (text) => {
             responseText = text
           })
         }
@@ -474,7 +474,7 @@ export class MessageBridge {
   /**
    * 处理 SDK 消息（提取的通用逻辑）
    */
-  private async processSDKMessage(sdkMessage: any, chatId: string, projectId: string, taskDisplayId: string, updateResponseText: (text: string) => void): Promise<void> {
+  private async processSDKMessage(sdkMessage: any, chatId: string, projectId: string, taskDisplayId: string, currentResponseText: string, updateResponseText: (text: string) => void): Promise<void> {
     const project = this.bot.projects.find(p => p.id === projectId)
     if (!project) return
 
@@ -492,15 +492,18 @@ export class MessageBridge {
       if (event?.type === 'content_block_delta') {
         const delta = event.delta
         if (delta?.type === 'text_delta' && delta.text) {
-          updateResponseText(delta.text)
-          await this.updateCard(chatId, project, delta.text,taskDisplayId)
+          // 累积文本：在当前文本基础上追加增量
+          const newText = currentResponseText + delta.text
+          updateResponseText(newText)
+          // 传递累积的完整文本给 updateCard
+          await this.updateCard(chatId, project, newText, taskDisplayId)
         }
       } else if (event?.type === 'content_block_start') {
         const block = event.content_block
         if (block?.type === 'tool_use' && block.name) {
           // 流事件中的 tool_use 可能没有 input，先添加占位
-          this.addOrUpdateToolCall(block.name, undefined)
-          await this.updateCard(chatId, project, '',taskDisplayId)
+          this.addToolCall(block.name, undefined)
+          await this.updateCard(chatId, project, currentResponseText, taskDisplayId)
         }
       }
     } else if (sdkMessage.type === 'assistant') {
@@ -509,12 +512,15 @@ export class MessageBridge {
       if (content) {
         for (const block of content) {
           if (block.type === 'text' && block.text) {
-            updateResponseText(block.text)
-            await this.updateCard(chatId, project, block.text,taskDisplayId)
+            // 累积文本：在当前文本基础上追加
+            const newText = currentResponseText + block.text
+            updateResponseText(newText)
+            // 传递累积的完整文本给 updateCard
+            await this.updateCard(chatId, project, newText, taskDisplayId)
           } else if (block.type === 'tool_use' && block.name) {
             // assistant 消息中的 tool_use 通常包含完整的 input
-            this.addOrUpdateToolCall(block.name, block.input)
-            await this.updateCard(chatId, project, '',taskDisplayId)
+            this.addToolCall(block.name, block.input)
+            await this.updateCard(chatId, project, currentResponseText, taskDisplayId)
           }
         }
       }
@@ -626,26 +632,14 @@ export class MessageBridge {
   }
 
   /**
-   * 添加或更新工具调用
-   * 如果已存在同名的 running 工具，则更新其 detail
-   * 否则添加新的工具调用
+   * 添加工具调用记录
+   * 每次工具调用都是独立记录，即使同名工具也分别记录
    */
-  private addOrUpdateToolCall(name: string, input: unknown): void {
-    // 查找是否已有同名的 running 工具
-    const existingTool = this.toolCalls.find(t => t.name === name && t.status === 'running')
-
-    if (existingTool) {
-      // 更新现有工具的详情
-      if (input !== undefined) {
-        existingTool.detail = formatToolDetail(name, input)
-      }
-    } else {
-      // 添加新工具
-      this.toolCalls.push({
-        name,
-        detail: input !== undefined ? formatToolDetail(name, input) : '',
-        status: 'running'
-      })
-    }
+  private addToolCall(name: string, input: unknown): void {
+    this.toolCalls.push({
+      name,
+      detail: input !== undefined ? formatToolDetail(name, input) : '',
+      status: 'running'
+    })
   }
 }
